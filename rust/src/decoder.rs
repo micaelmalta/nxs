@@ -115,7 +115,9 @@ pub fn decode(data: &[u8]) -> Result<DecodedFile> {
         for _ in 0..key_count {
             let start = pos;
             while pos < data.len() && data[pos] != 0 {
-                if pos - start > 256 { return Err(NxsError::OutOfBounds); }
+                if pos - start > 256 {
+                    return Err(NxsError::OutOfBounds);
+                }
                 pos += 1;
             }
             let name = String::from_utf8_lossy(&data[start..pos]).to_string();

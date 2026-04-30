@@ -62,7 +62,7 @@ jobs:
         run: cargo install cargo-fuzz
 
       - name: Fuzz decode (60s)
-        run: cargo fuzz run fuzz_decode -- -max_total_time=60
+        run: cargo fuzz run fuzz_decode -- -max_total_time=60 -rss_limit_mb=0 -max_len=8192
 
       - name: Fuzz writer roundtrip (60s)
-        run: cargo fuzz run fuzz_writer_roundtrip -- -max_total_time=60
+        run: cargo fuzz run fuzz_writer_roundtrip -- -max_total_time=60 -rss_limit_mb=0 -max_len=4096

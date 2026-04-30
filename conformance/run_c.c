@@ -156,13 +156,17 @@ static jv_t *jparse(void) {
     if(c=='f') { gp+=5; return jv_bool(0); }
     if(c=='n') { gp+=4; return jv_null(); }
     if(c=='-'||(c>='0'&&c<='9')) {
-        char *end; double f=strtod(gp,&end);
-        /* if no decimal/exponent and fits int64, use int */
+        /* detect float by scanning for . e E before parsing */
         int is_float=0;
-        for(const char *p=gp;p<end;p++) if(*p=='.'||*p=='e'||*p=='E') { is_float=1; break; }
-        gp=end;
-        if(is_float) return jv_float(f);
-        int64_t iv=(int64_t)f; return jv_int(iv);
+        for(const char *p=gp;*p&&*p!=','&&*p!=']'&&*p!='}';p++)
+            if(*p=='.'||*p=='e'||*p=='E') { is_float=1; break; }
+        if(is_float) {
+            char *end; double f=strtod(gp,&end); gp=end;
+            return jv_float(f);
+        } else {
+            char *end; int64_t iv=strtoll(gp,&end,10); gp=end;
+            return jv_int(iv);
+        }
     }
     gp++;
     return jv_null();
