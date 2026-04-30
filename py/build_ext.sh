@@ -12,11 +12,17 @@ OUT="_nxs${EXT_SUFFIX}"
 echo "Building $OUT"
 echo "  Python include: $PYINCLUDE"
 
-# -undefined dynamic_lookup lets the .so load without linking libpython on macOS
+# -undefined dynamic_lookup is macOS-only; on Linux use python3-config --ldflags
+if [[ "$(uname)" == "Darwin" ]]; then
+  LDFLAGS="-undefined dynamic_lookup"
+else
+  LDFLAGS=$(python3-config --ldflags --embed 2>/dev/null || python3-config --ldflags)
+fi
+
 cc -O3 -Wall -Wextra -fPIC \
    -I"$PYINCLUDE" \
    -shared \
-   -undefined dynamic_lookup \
+   $LDFLAGS \
    _nxs.c \
    -o "$OUT"
 
