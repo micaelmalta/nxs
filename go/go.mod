@@ -1,3 +1,3 @@
-module nxs
+module github.com/micaelmalta/nxs/go
 
-go 1.26.1
+go 1.23

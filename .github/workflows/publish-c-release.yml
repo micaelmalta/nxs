@@ -1,0 +1,53 @@
+name: Publish C Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test
+        working-directory: c
+        run: |
+          make
+          echo "C build succeeded"
+
+      - name: Create release tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARDIR="nxs-c-${VERSION}"
+          mkdir "${TARDIR}"
+          cp c/nxs.h c/nxs.c c/CMakeLists.txt c/README.md "${TARDIR}/"
+          tar czf "nxs-c-${VERSION}.tar.gz" "${TARDIR}"
+          echo "TARBALL=nxs-c-${VERSION}.tar.gz" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "NXS C library v${{ env.VERSION }}"
+          body: |
+            ## NXS C library v${{ env.VERSION }}
+
+            Single-header + single-source C library for reading NXB files.
+
+            ### Usage
+
+            ```bash
+            tar xzf nxs-c-${{ env.VERSION }}.tar.gz
+            gcc -o myapp myapp.c nxs-c-${{ env.VERSION }}/nxs.c -I nxs-c-${{ env.VERSION }}
+            ```
+
+            ### CMake
+
+            ```cmake
+            add_subdirectory(nxs-c-${{ env.VERSION }})
+            target_link_libraries(myapp PRIVATE nxs)
+            ```
+          files: ${{ env.TARBALL }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

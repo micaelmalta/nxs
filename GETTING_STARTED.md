@@ -4,6 +4,25 @@ Code examples for all ten language implementations. For the format specification
 
 ---
 
+## Install
+
+Install from your language's package registry — no build tools required for the pure implementations.
+
+| Language | Registry | Install command |
+| :--- | :--- | :--- |
+| Rust | crates.io | `cargo add nxs` |
+| JavaScript | npm | `npm install @micaelmalta/nxs` |
+| Python | PyPI | `pip install nxs-format` |
+| Go | pkg.go.dev | `go get github.com/micaelmalta/nxs/go` |
+| Ruby | RubyGems | `gem install nxs-format` |
+| PHP | Packagist | `composer require micaelmalta/nxs` |
+| C | GitHub Releases | Download `nxs-c-1.0.0.tar.gz` and include `nxs.h` + `nxs.c` |
+| Swift | Swift Package Index | `.package(url: "https://github.com/micaelmalta/nxs", from: "1.0.0")` |
+| Kotlin | Maven Central | `implementation("io.github.micaelmalta:nxs-kotlin:1.0.0")` |
+| C# | NuGet | `dotnet add package NxsFormat` |
+
+---
+
 ## The `.nxs` Source Format
 
 Every value is prefixed with a sigil that determines its binary encoding:
@@ -263,7 +282,7 @@ python bench_c.py           # C extension vs json
 
 ```go
 import (
-    "nxs"
+    "github.com/micaelmalta/nxs/go"
     "os"
 )
 

@@ -1,0 +1,45 @@
+name: Publish NuGet
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  test:
+    uses: ./.github/workflows/fixtures.yml
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0'
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Run tests
+        working-directory: csharp
+        run: dotnet run -p:NxsTargetFramework=net9.0 -- ../js/fixtures
+
+      - name: Pack
+        working-directory: csharp
+        run: dotnet pack -c Release -p:NxsTargetFramework=net9.0 -o ./nupkg
+
+      - name: Publish to NuGet
+        working-directory: csharp
+        run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Smoke test (install from registry)
+        run: |
+          mkdir /tmp/smoke-nuget && cd /tmp/smoke-nuget
+          dotnet new console -n SmokeTest
+          cd SmokeTest
+          dotnet add package NxsFormat
+          echo "Smoke test: package installable"

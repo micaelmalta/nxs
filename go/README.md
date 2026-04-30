@@ -2,6 +2,12 @@
 
 Zero-copy `.nxb` reader for Go 1.21+. No external dependencies.
 
+## Install
+
+```bash
+go get github.com/micaelmalta/nxs/go
+```
+
 ## Requirements
 
 Go 1.21+.
@@ -10,7 +16,7 @@ Go 1.21+.
 
 ```go
 import (
-    "nxs"
+    "github.com/micaelmalta/nxs/go"
     "os"
 )
 

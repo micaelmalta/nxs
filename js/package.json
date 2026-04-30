@@ -1,14 +1,27 @@
 {
-  "name": "nxs-js",
-  "version": "0.1.0",
+  "name": "@micaelmalta/nxs",
+  "version": "1.0.0",
   "type": "module",
   "description": "JavaScript reader for the Nexus Standard (NXS) binary format",
   "main": "nxs.js",
+  "files": [
+    "nxs.js",
+    "wasm.js",
+    "wasm/nxs_reducers.wasm"
+  ],
   "exports": {
-    ".": "./nxs.js"
+    ".": "./nxs.js",
+    "./wasm": "./wasm.js"
   },
   "scripts": {
     "bench": "node bench.js ./fixtures",
     "test": "node test.js"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/micaelmalta/nxs.git"
+  },
+  "license": "MIT",
+  "author": "Micael Malta",
+  "keywords": ["nxs", "binary", "serialization", "zero-copy", "nexus-standard"]
 }

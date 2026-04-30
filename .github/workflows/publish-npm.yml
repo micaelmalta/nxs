@@ -1,0 +1,42 @@
+name: Publish npm
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  test:
+    uses: ./.github/workflows/fixtures.yml
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Run tests
+        run: node js/test.js js/fixtures
+
+      - name: Publish
+        working-directory: js
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Smoke test (install from registry)
+        run: |
+          mkdir /tmp/smoke-npm && cd /tmp/smoke-npm
+          npm init -y
+          npm install @micaelmalta/nxs
+          node -e "import('@micaelmalta/nxs').then(m => { console.log('ok', Object.keys(m)) })"

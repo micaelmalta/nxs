@@ -50,8 +50,8 @@ kotlin/.gradle/
 kotlin/build/
 # gradle/wrapper/gradle-wrapper.jar and gradlew are intentionally committed
 
-# WebAssembly build artifacts
-js/wasm/*.wasm
+# WebAssembly build artifacts (nxs_reducers.wasm is pre-built and committed)
+# js/wasm/*.wasm — intentionally tracked; built by .github/workflows/build-wasm.yml
 
 # Editor / tooling
 .playwright-mcp/

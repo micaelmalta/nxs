@@ -1,0 +1,36 @@
+name: Publish Packagist
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  test:
+    uses: ./.github/workflows/fixtures.yml
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Run tests
+        run: php php/test.php js/fixtures
+
+      - name: Trigger Packagist webhook
+        run: |
+          curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"repository": {"url": "https://github.com/micaelmalta/nxs"}}' \
+            "https://packagist.org/api/update-package?username=micaelmalta&apiToken=${{ secrets.PACKAGIST_API_TOKEN }}"

@@ -1,0 +1,54 @@
+name: Publish PyPI
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  test:
+    uses: ./.github/workflows/fixtures.yml
+
+  build-and-publish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Run tests (pure Python)
+        run: python py/test_nxs.py js/fixtures
+
+      - name: Build C extension
+        working-directory: py
+        run: bash build_ext.sh
+
+      - name: Run tests (C extension)
+        run: python py/test_c_ext.py js/fixtures
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build sdist and wheel
+        working-directory: py
+        run: python -m build
+
+      - name: Publish to PyPI
+        working-directory: py
+        run: twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Smoke test (install from registry)
+        run: |
+          pip install nxs-format
+          python -c "import nxs; print('ok')"

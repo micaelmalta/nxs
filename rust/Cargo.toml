@@ -1,9 +1,15 @@
 [package]
 name = "nxs"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 authors = ["Micael Malta"]
 license = "MIT"
+description = "Zero-copy compiler and reader for the Nexus Standard (NXS) bi-modal serialization format"
+repository = "https://github.com/micaelmalta/nxs"
+documentation = "https://docs.rs/nxs"
+readme = "README.md"
+keywords = ["serialization", "binary", "zero-copy", "nxs", "nexus"]
+categories = ["encoding", "parser-implementations", "command-line-utilities"]
 
 [lib]
 name = "nxs"
@@ -20,6 +26,14 @@ path = "src/bench.rs"
 [[bin]]
 name = "gen_fixtures"
 path = "src/gen_fixtures.rs"
+
+[[bin]]
+name = "gen_conformance"
+path = "../conformance/generate.rs"
+
+[[bin]]
+name = "conformance_runner"
+path = "../conformance/run_rust.rs"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
