@@ -3,11 +3,7 @@ name: Publish RubyGems
 on:
   workflow_dispatch:
 jobs:
-  test:
-    uses: ./.github/workflows/fixtures.yml
-
   publish:
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,14 +12,19 @@ jobs:
         with:
           ruby-version: '3.3'
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
-        with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Run tests
-        run: ruby ruby/test.rb js/fixtures
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-publish-ruby-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
+
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-ruby
 
       - name: Build gem
         working-directory: ruby

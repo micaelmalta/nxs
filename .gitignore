@@ -23,6 +23,9 @@ ruby/ext/nxs/*.bundle
 ruby/ext/nxs/*.bundle.dSYM/
 ruby/ext/nxs/mkmf.log
 
+# PHP Composer (phpstan for make lint)
+php/vendor/
+
 # PHP build artifacts
 php/nxs_ext/.libs/
 php/nxs_ext/autom4te.cache/
@@ -69,6 +72,7 @@ csharp/obj/
 
 # Swift build output
 swift/.build/
+swift/.swiftlint-cache/
 
 # Screenshot artifacts
 *.png

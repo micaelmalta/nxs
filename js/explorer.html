@@ -105,6 +105,12 @@
   .drop-zone .hint {
     color: var(--muted); font-size: 12px; flex: 1;
   }
+  .drop-zone .upload-label {
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .drop-zone .upload-label:hover { color: var(--text); }
   .drop-zone .file-info {
     color: var(--text);
     font-variant-numeric: tabular-nums;
@@ -317,10 +323,10 @@
         <p>10M-line viewer — virtual scroll, in-place search, zero-copy parsing</p>
       </div>
       <div class="hint" id="drop-hint">
-        Drop a <code>.nxb</code> file here, or
+        Drop a <code>.nxb</code> file here, <label for="file" class="upload-label">browse</label>, or
       </div>
-      <button id="pick">Choose file</button>
-      <input type="file" id="file" accept=".nxb" hidden>
+      <button type="button" id="pick">Choose file</button>
+      <input type="file" id="file" accept=".nxb,.NXB,application/octet-stream" hidden>
       <div class="file-info" id="file-info"></div>
     </div>
   </header>

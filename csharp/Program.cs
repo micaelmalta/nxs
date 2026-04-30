@@ -17,7 +17,7 @@ if (args.Length > 0 && args[0] == "--conformance")
 }
 
 string dir = args.Length > 0 ? args[0] : "../js/fixtures";
-string nxbPath  = Path.Combine(dir, "records_1000.nxb");
+string nxbPath = Path.Combine(dir, "records_1000.nxb");
 string jsonPath = Path.Combine(dir, "records_1000.json");
 
 if (!File.Exists(nxbPath))
@@ -27,15 +27,15 @@ if (!File.Exists(nxbPath))
     return 1;
 }
 
-byte[] nxbData  = File.ReadAllBytes(nxbPath);
-var    jsonArr  = JsonNode.Parse(File.ReadAllText(jsonPath))!.AsArray();
+byte[] nxbData = File.ReadAllBytes(nxbPath);
+var jsonArr = JsonNode.Parse(File.ReadAllText(jsonPath))!.AsArray();
 
 int passed = 0, failed = 0;
 
 void Check(string name, bool expr)
 {
     if (expr) { Console.WriteLine($"  ✓ {name}"); passed++; }
-    else      { Console.WriteLine($"  ✗ {name}"); failed++; }
+    else { Console.WriteLine($"  ✗ {name}"); failed++; }
 }
 
 Console.WriteLine("\nNXS C# Reader — Tests\n");
@@ -44,9 +44,9 @@ var r = new NxsReader(nxbData);
 Check("opens without error", true);
 Check("reads correct record count", r.RecordCount == 1000);
 Check("reads schema keys",
-    Array.IndexOf(r.Keys, "id")       >= 0 &&
+    Array.IndexOf(r.Keys, "id") >= 0 &&
     Array.IndexOf(r.Keys, "username") >= 0 &&
-    Array.IndexOf(r.Keys, "score")    >= 0);
+    Array.IndexOf(r.Keys, "score") >= 0);
 
 var obj0 = r.Record(0);
 Check("record(0) id matches JSON",
@@ -68,7 +68,7 @@ bool threw = false;
 try { r.Record(10000); } catch (NxsException) { threw = true; }
 Check("out-of-bounds throws NxsException", threw);
 
-double sumNXS  = r.SumF64("score");
+double sumNXS = r.SumF64("score");
 double sumJSON = 0;
 foreach (var rec in jsonArr) sumJSON += rec!["score"]!.GetValue<double>();
 Check("sum_f64 matches JSON sum", Math.Abs(sumNXS - sumJSON) < 0.01);

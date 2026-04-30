@@ -10,15 +10,15 @@ public static class Bench
 {
     public static void Run(string dir)
     {
-        string nxbPath  = Path.Combine(dir, "records_1000000.nxb");
+        string nxbPath = Path.Combine(dir, "records_1000000.nxb");
         string jsonPath = Path.Combine(dir, "records_1000000.json");
-        string csvPath  = Path.Combine(dir, "records_1000000.csv");
+        string csvPath = Path.Combine(dir, "records_1000000.csv");
 
         if (!File.Exists(nxbPath)) { Console.WriteLine($"fixture not found: {nxbPath}"); return; }
 
-        byte[] nxbData  = File.ReadAllBytes(nxbPath);
+        byte[] nxbData = File.ReadAllBytes(nxbPath);
         byte[] jsonData = File.Exists(jsonPath) ? File.ReadAllBytes(jsonPath) : Array.Empty<byte>();
-        byte[] csvData  = File.Exists(csvPath)  ? File.ReadAllBytes(csvPath)  : Array.Empty<byte>();
+        byte[] csvData = File.Exists(csvPath) ? File.ReadAllBytes(csvPath) : Array.Empty<byte>();
 
         var r = new NxsReader(nxbData);
         Console.WriteLine($"\nNXS C# Benchmark — {r.RecordCount} records");
@@ -84,7 +84,7 @@ public static class Bench
 
         Console.WriteLine("  ┌─ sum(score) ─────────────────────────────────────────────────────────┐");
         double jsonMs = jsonData.Length > 0 ? BenchMs("JSON parse + loop", 0, () => { _ = JsonSumScore(); }) : 0;
-        if (csvData.Length > 0) BenchMs("CSV raw scan",  jsonMs, () => { _ = CsvSumScore(); });
+        if (csvData.Length > 0) BenchMs("CSV raw scan", jsonMs, () => { _ = CsvSumScore(); });
         BenchMs("NXS SumF64", jsonMs, () => { _ = r.SumF64("score"); });
         Console.WriteLine("  └──────────────────────────────────────────────────────────────────────┘\n");
 

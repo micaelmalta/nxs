@@ -2,16 +2,12 @@ name: Ruby
 
 on:
   push:
-    paths: ['ruby/**', '.github/workflows/ruby.yml', '.github/workflows/fixtures.yml']
+    paths: ['ruby/**', 'Makefile', '.github/workflows/ruby.yml']
   pull_request:
-    paths: ['ruby/**', '.github/workflows/ruby.yml', '.github/workflows/fixtures.yml']
+    paths: ['ruby/**', 'Makefile', '.github/workflows/ruby.yml']
 
 jobs:
-  fixtures:
-    uses: ./.github/workflows/fixtures.yml
-
-  test:
-    needs: fixtures
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,17 +16,19 @@ jobs:
         with:
           ruby-version: '3.3'
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
+      - run: gem install rubocop --no-document
+      - run: make lint-ruby
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
         with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-ruby-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
 
-      - name: Test (pure Ruby)
-        run: ruby ruby/test.rb js/fixtures
-
-      - name: Build C extension
-        run: bash ruby/ext/build.sh
-
-      - name: Test (C extension)
-        run: ruby ruby/bench_c.rb js/fixtures
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-ruby-ci

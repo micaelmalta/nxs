@@ -27,6 +27,19 @@ const SIGIL_BINARY  = 0x3C; // <
 const SIGIL_LINK    = 0x26; // &
 const SIGIL_NULL    = 0x5E; // ^
 
+/** Exposes all wire sigil bytes for spec parity (keeps otherwise-unused constants live). */
+export const WIRE_SIGILS = Object.freeze({
+  int: SIGIL_INT,
+  float: SIGIL_FLOAT,
+  bool: SIGIL_BOOL,
+  keyword: SIGIL_KEYWORD,
+  str: SIGIL_STR,
+  time: SIGIL_TIME,
+  binary: SIGIL_BINARY,
+  link: SIGIL_LINK,
+  null: SIGIL_NULL,
+});
+
 // ── Error types ─────────────────────────────────────────────────────────────
 
 export class NxsError extends Error {
@@ -104,7 +117,6 @@ function decodeUtf8Fast(bytes, offset, length) {
 const _scratchBuf = new ArrayBuffer(8);
 const _scratchU8  = new Uint8Array(_scratchBuf);
 const _scratchF64 = new Float64Array(_scratchBuf);
-const _scratchI32 = new Int32Array(_scratchBuf);
 
 function rdU16(bytes, off) {
   return bytes[off] | (bytes[off + 1] << 8);
@@ -669,7 +681,7 @@ export class NxsObject {
     return obj;
   }
 
-  _decodeValue(offset, sigilHint) {
+  _decodeValue(offset, _sigilHint) {
     const { view, bytes } = this.reader;
 
     // If we have no hint, peek: if first 4 bytes are a known magic, it's

@@ -522,9 +522,11 @@ class Reader
                     if (($dataBits >> $b) & 1) {
                         $found = true;
                     }
-                    goto DONE_MASK;
+                    break 2;
                 }
-                if (($dataBits >> $b) & 1) $tableIdx++;
+                if (($dataBits >> $b) & 1) {
+                    $tableIdx++;
+                }
                 $curSlot++;
             }
             if (!($byte & 0x80)) {
@@ -532,8 +534,10 @@ class Reader
                 return -1;
             }
         }
-        DONE_MASK:
-        if (!$found) return -1;
+
+        if (!$found) {
+            return -1;
+        }
 
         // Drain remaining continuation bytes
         while ($byte & 0x80) {

@@ -1,9 +1,14 @@
 package nxs
 
-import java.io.File
 import org.json.JSONArray
+import java.io.File
 
-fun benchMs(label: String, baseline: Double = 0.0, runs: Int = 5, body: () -> Unit): Double {
+fun benchMs(
+    label: String,
+    baseline: Double = 0.0,
+    runs: Int = 5,
+    body: () -> Unit,
+): Double {
     var best = Double.MAX_VALUE
     repeat(runs) {
         val t0 = System.nanoTime()
@@ -27,16 +32,19 @@ fun jsonSumScore(jsonBytes: ByteArray): Double {
 // CSV raw scan — score is column 6 (0-based)
 fun csvSumScore(csvBytes: ByteArray): Double {
     var sum = 0.0
-    var line = 0; var p = 0
+    var line = 0
+    var p = 0
     val size = csvBytes.size
     while (p < size) {
         var rowEnd = p
         while (rowEnd < size && csvBytes[rowEnd] != '\n'.code.toByte()) rowEnd++
         if (line > 0) {
-            var col = p; var c = 0
+            var col = p
+            var c = 0
             while (c < 6 && col < rowEnd) {
                 while (col < rowEnd && csvBytes[col] != ','.code.toByte()) col++
-                col++; c++
+                col++
+                c++
             }
             if (c == 6 && col < rowEnd) {
                 var end = col
@@ -44,7 +52,8 @@ fun csvSumScore(csvBytes: ByteArray): Double {
                 sum += String(csvBytes, col, end - col, Charsets.UTF_8).toDoubleOrNull() ?: 0.0
             }
         }
-        line++; p = rowEnd + 1
+        line++
+        p = rowEnd + 1
     }
     return sum
 }
@@ -53,9 +62,9 @@ fun main(args: Array<String>) = runBench(args)
 
 fun runBench(args: Array<String>) {
     val dir = args.firstOrNull() ?: "../js/fixtures"
-    val nxbFile  = File("$dir/records_1000000.nxb")
+    val nxbFile = File("$dir/records_1000000.nxb")
     val jsonFile = File("$dir/records_1000000.json")
-    val csvFile  = File("$dir/records_1000000.csv")
+    val csvFile = File("$dir/records_1000000.csv")
 
     if (!nxbFile.exists()) {
         println("fixture not found: ${nxbFile.path}")
@@ -63,22 +72,27 @@ fun runBench(args: Array<String>) {
         return
     }
 
-    val nxbBytes  = nxbFile.readBytes()
+    val nxbBytes = nxbFile.readBytes()
     val jsonBytes = jsonFile.readBytes()
-    val csvBytes  = csvFile.readBytes()
+    val csvBytes = csvFile.readBytes()
 
     val r = NxsReader(nxbBytes)
     println("\nNXS Kotlin Benchmark — ${r.recordCount} records")
-    println("  .nxb %.2f MB   .json %.2f MB   .csv %.2f MB\n"
-        .format(nxbBytes.size / 1e6, jsonBytes.size / 1e6, csvBytes.size / 1e6))
+    println(
+        "  .nxb %.2f MB   .json %.2f MB   .csv %.2f MB\n"
+            .format(nxbBytes.size / 1e6, jsonBytes.size / 1e6, csvBytes.size / 1e6),
+    )
 
     // Warm-up JIT
-    repeat(2) { r.sumF64("score"); r.sumI64("id") }
+    repeat(2) {
+        r.sumF64("score")
+        r.sumI64("id")
+    }
 
     println("  ┌─ sum(score) ─────────────────────────────────────────────────────────┐")
     val jsonMs = benchMs("JSON parse + loop") { jsonSumScore(jsonBytes) }
-    benchMs("CSV raw scan",     baseline = jsonMs) { csvSumScore(csvBytes) }
-    benchMs("NXS sumF64",       baseline = jsonMs) { r.sumF64("score") }
+    benchMs("CSV raw scan", baseline = jsonMs) { csvSumScore(csvBytes) }
+    benchMs("NXS sumF64", baseline = jsonMs) { r.sumF64("score") }
     println("  └──────────────────────────────────────────────────────────────────────┘\n")
 
     println("  ┌─ sum(id) ────────────────────────────────────────────────────────────┐")
@@ -87,7 +101,9 @@ fun runBench(args: Array<String>) {
 
     println("  ┌─ random access ×1000 ────────────────────────────────────────────────┐")
     benchMs("NXS record(k).getF64") {
-        for (i in 0 until 1000) { r.record(i * 997 % r.recordCount).getF64("score") }
+        for (i in 0 until 1000) {
+            r.record(i * 997 % r.recordCount).getF64("score")
+        }
     }
     println("  └──────────────────────────────────────────────────────────────────────┘\n")
 }

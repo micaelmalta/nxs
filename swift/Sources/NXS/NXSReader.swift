@@ -20,11 +20,11 @@ public enum NXSError: Error {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-private let magicFile:   UInt32 = 0x4E585342
-private let magicObj:    UInt32 = 0x4E58534F
-private let magicList:   UInt32 = 0x4E58534C
+private let magicFile: UInt32 = 0x4E585342
+private let magicObj: UInt32 = 0x4E58534F
+private let magicList: UInt32 = 0x4E58534C
 private let magicFooter: UInt32 = 0x2153584E
-private let flagSchema:  UInt16 = 0x0002
+private let flagSchema: UInt16 = 0x0002
 
 // ── Little-endian helpers ─────────────────────────────────────────────────────
 
@@ -49,15 +49,15 @@ private func rdF64(_ data: Data, _ off: Int) -> Double {
 public final class NXSReader {
     private let data: Data
 
-    public let version:   UInt16
-    public let flags:     UInt16
-    public let dictHash:  UInt64
-    public let tailPtr:   UInt64
-    public let keys:      [String]
+    public let version: UInt16
+    public let flags: UInt16
+    public let dictHash: UInt64
+    public let tailPtr: UInt64
+    public let keys: [String]
     public let keySigils: [UInt8]
     private let keyIndex: [String: Int]
     public  let recordCount: Int
-    private let tailStart:   Int
+    private let tailStart: Int
 
     public init(_ data: Data) throws {
         self.data = data
@@ -73,7 +73,7 @@ public final class NXSReader {
 
         var ks: [String] = []
         var kSigils: [UInt8] = []
-        var kIndex:  [String: Int] = [:]
+        var kIndex: [String: Int] = [:]
 
         if flags & flagSchema != 0 {
             var off = 32
@@ -255,7 +255,7 @@ public final class NXSReader {
 
     // Internal accessor for NXSObject
     func rawData() -> Data { data }
-    func keyIdx()  -> [String: Int] { keyIndex }
+    func keyIdx() -> [String: Int] { keyIndex }
     func kSigils() -> [UInt8] { keySigils }
 
     // ── DictHash validation ───────────────────────────────────────────────────

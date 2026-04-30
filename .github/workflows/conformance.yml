@@ -14,6 +14,7 @@ on:
       - 'swift/**'
       - 'kotlin/**'
       - 'csharp/**'
+      - 'Makefile'
       - '.github/workflows/conformance.yml'
   pull_request:
     paths:
@@ -28,10 +29,10 @@ on:
       - 'swift/**'
       - 'kotlin/**'
       - 'csharp/**'
+      - 'Makefile'
       - '.github/workflows/conformance.yml'
 
 jobs:
-  # ── Step 1: Generate conformance vectors ───────────────────────────────────
   generate-vectors:
     runs-on: ubuntu-latest
     steps:
@@ -48,18 +49,14 @@ jobs:
           key: rust-conformance-${{ hashFiles('rust/Cargo.lock') }}
           restore-keys: rust-conformance-
 
-      - name: Generate conformance vectors
-        working-directory: rust
-        run: cargo run --release --bin gen_conformance -- ../conformance
+      - run: make conformance-generate
 
-      - name: Upload conformance vectors
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
           retention-days: 1
 
-  # ── Step 2: Run all conformance runners (in parallel) ──────────────────────
   run-rust:
     needs: generate-vectors
     runs-on: ubuntu-latest
@@ -77,15 +74,12 @@ jobs:
           key: rust-conformance-${{ hashFiles('rust/Cargo.lock') }}
           restore-keys: rust-conformance-
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Run Rust conformance runner
-        working-directory: rust
-        run: cargo run --release --bin conformance_runner -- ../conformance
+      - run: make conformance-run-rust
 
   run-js:
     needs: generate-vectors
@@ -97,14 +91,12 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Run JS conformance runner
-        run: node conformance/run_js.js conformance/
+      - run: make conformance-run-js
 
   run-python:
     needs: generate-vectors
@@ -116,14 +108,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Run Python conformance runner
-        run: python3 conformance/run_py.py conformance/
+      - run: make conformance-run-py
 
   run-go:
     needs: generate-vectors
@@ -135,15 +125,12 @@ jobs:
         with:
           go-version: '1.23'
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Run Go conformance runner
-        working-directory: go
-        run: go run ../conformance/run_go.go ../conformance/
+      - run: make conformance-run-go
 
   run-ruby:
     needs: generate-vectors
@@ -155,14 +142,12 @@ jobs:
         with:
           ruby-version: '3.3'
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Run Ruby conformance runner
-        run: ruby conformance/run_ruby.rb conformance/
+      - run: make conformance-run-ruby
 
   run-php:
     needs: generate-vectors
@@ -173,16 +158,13 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: gmp
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Run PHP conformance runner
-        run: php conformance/run_php.php conformance/
+      - run: make conformance-run-php
 
   run-c:
     needs: generate-vectors
@@ -190,16 +172,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Build and run C conformance runner
-        run: |
-          cc -std=c99 -O2 -Ic/ c/nxs.c conformance/run_c.c -o /tmp/run_c -lm -Wno-format-truncation -Wno-unused-result
-          /tmp/run_c conformance/
+      - run: make conformance-run-c
 
   run-swift:
     needs: generate-vectors
@@ -207,15 +185,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Run Swift conformance runner
-        working-directory: swift
-        run: swift run nxs-conformance ../conformance
+      - run: make conformance-run-swift
 
   run-kotlin:
     needs: generate-vectors
@@ -225,41 +200,17 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '21'
 
-      - name: Setup Gradle cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('kotlin/build.gradle.kts') }}
-          restore-keys: gradle-
+      - uses: gradle/actions/setup-gradle@v4
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Build Kotlin
-        working-directory: kotlin
-        run: ./gradlew jar
-
-      - name: Install kotlinc
-        run: |
-          curl -sL https://github.com/JetBrains/kotlin/releases/download/v2.2.0/kotlin-compiler-2.2.0.zip -o /tmp/kotlinc.zip
-          unzip -q /tmp/kotlinc.zip -d /tmp/
-
-      - name: Compile and run Kotlin conformance runner
-        run: |
-          /tmp/kotlinc/bin/kotlinc \
-            -cp kotlin/build/libs/nxs-1.0.0.jar \
-            conformance/run_kotlin.kt \
-            -include-runtime \
-            -d /tmp/run_kotlin.jar
-          java -cp "/tmp/run_kotlin.jar:kotlin/build/libs/nxs-1.0.0.jar" conformance.MainKt ../conformance
+      - run: make conformance-run-kotlin
 
   run-csharp:
     needs: generate-vectors
@@ -271,12 +222,11 @@ jobs:
         with:
           dotnet-version: '9.0'
 
-      - name: Download vectors
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: conformance-vectors-${{ github.sha }}
           path: conformance/
 
-      - name: Run C# conformance runner
-        working-directory: csharp
-        run: dotnet run -- --conformance ../conformance
+      - run: make conformance-run-csharp
+        env:
+          DOTNET_FRAMEWORK: net9.0

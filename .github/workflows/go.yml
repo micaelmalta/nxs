@@ -2,16 +2,12 @@ name: Go
 
 on:
   push:
-    paths: ['go/**', '.github/workflows/go.yml', '.github/workflows/fixtures.yml']
+    paths: ['go/**', 'Makefile', '.github/workflows/go.yml']
   pull_request:
-    paths: ['go/**', '.github/workflows/go.yml', '.github/workflows/fixtures.yml']
+    paths: ['go/**', 'Makefile', '.github/workflows/go.yml']
 
 jobs:
-  fixtures:
-    uses: ./.github/workflows/fixtures.yml
-
-  test:
-    needs: fixtures
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,12 +17,5 @@ jobs:
           go-version: '1.23'
           cache-dependency-path: go/go.mod
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
-        with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
-
-      - name: Test
-        working-directory: go
-        run: go test ./...
+      - run: make lint-go
+      - run: make test-go

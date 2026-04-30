@@ -3,11 +3,7 @@ name: Publish PyPI
 on:
   workflow_dispatch:
 jobs:
-  test:
-    uses: ./.github/workflows/fixtures.yml
-
   build-and-publish:
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,21 +12,19 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
         with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-publish-pypi-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
 
-      - name: Run tests (pure Python)
-        run: python py/test_nxs.py js/fixtures
-
-      - name: Build C extension
-        working-directory: py
-        run: bash build_ext.sh
-
-      - name: Run tests (C extension)
-        run: python py/test_c_ext.py js/fixtures
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-py-ci
 
       - name: Install build tools
         run: pip install build twine

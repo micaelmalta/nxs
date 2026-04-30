@@ -31,7 +31,7 @@ public static class ConformanceRunner
     {
         if (a == b) return 0;
         double diff = Math.Abs(a - b);
-        double mag  = Math.Max(Math.Abs(a), Math.Abs(b));
+        double mag = Math.Max(Math.Abs(a), Math.Abs(b));
         if (mag < 1e-300) return diff < 1e-300 ? 0 : 1;
         return diff / mag;
     }
@@ -49,10 +49,10 @@ public static class ConformanceRunner
                 double ev = expected.GetDouble();
                 return actual switch
                 {
-                    long l   => ApproxEq((double)l, ev) < 1e-9,
+                    long l => ApproxEq((double)l, ev) < 1e-9,
                     double d => ApproxEq(d, ev) < 1e-9,
-                    int i    => ApproxEq((double)i, ev) < 1e-9,
-                    _        => false,
+                    int i => ApproxEq((double)i, ev) < 1e-9,
+                    _ => false,
                 };
             case JsonValueKind.String:
                 return actual is string s && s == expected.GetString();
@@ -72,7 +72,6 @@ public static class ConformanceRunner
     {
         int p = objOffset + 8;
         int cur = 0, t = 0;
-        bool found = false;
         int b = 0;
 
         while (true)
@@ -85,14 +84,14 @@ public static class ConformanceRunner
                 if (cur == slot)
                 {
                     if (((bits >> i) & 1) == 0) return -1;
-                    found = true; goto doneMask;
+                    goto doneMask;
                 }
                 if (((bits >> i) & 1) == 1) t++;
                 cur++;
             }
             if ((b & 0x80) == 0) return -1;
         }
-        doneMask:
+    doneMask:
         while ((b & 0x80) != 0)
         {
             if (p >= data.Length) break;
@@ -144,14 +143,14 @@ public static class ConformanceRunner
             0x22 => (object)Encoding.UTF8.GetString(data, off + 4, BitConverter.ToInt32(data, off)),
             0x40 => (object)BitConverter.ToInt64(data, off),
             0x5E => null,
-            _    => (object)BitConverter.ToInt64(data, off),
+            _ => (object)BitConverter.ToInt64(data, off),
         };
     }
 
     static void RunPositive(string dir, string name, JsonElement expected)
     {
         var nxbPath = Path.Combine(dir, $"{name}.nxb");
-        var data   = File.ReadAllBytes(nxbPath);
+        var data = File.ReadAllBytes(nxbPath);
         var reader = new NxsReader(data);
 
         if (expected.TryGetProperty("record_count", out var jrc))

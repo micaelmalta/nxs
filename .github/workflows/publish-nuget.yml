@@ -3,11 +3,7 @@ name: Publish NuGet
 on:
   workflow_dispatch:
 jobs:
-  test:
-    uses: ./.github/workflows/fixtures.yml
-
   publish:
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,15 +12,21 @@ jobs:
         with:
           dotnet-version: '9.0'
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
-        with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Run tests
-        working-directory: csharp
-        run: dotnet run -p:NxsTargetFramework=net9.0 -- ../js/fixtures
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-publish-nuget-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
+
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-csharp
+        env:
+          DOTNET_FRAMEWORK: net9.0
 
       - name: Pack
         working-directory: csharp

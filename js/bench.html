@@ -85,6 +85,32 @@
     margin-bottom: 24px;
   }
   .controls label { color: var(--muted); }
+  .upload-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    align-items: center;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--muted);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .upload-row.drag {
+    border-color: var(--accent);
+    background: var(--panel-2);
+  }
+  .upload-row .upload-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .upload-row .upload-summary {
+    flex: 1;
+    min-width: 140px;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .upload-row .upload-summary.empty { color: var(--muted); }
   select, button {
     background: var(--panel-2);
     color: var(--text);
@@ -226,6 +252,16 @@
     </div>
     <button class="primary" id="run">Run benchmark</button>
     <span class="status" id="status">Ready.</span>
+  </div>
+
+  <div class="upload-row" id="upload-drop" title="Drop .nxb plus optional matching .json and .csv">
+    <span>Upload your own fixtures (same record counts):</span>
+    <div class="upload-actions">
+      <button type="button" id="pick-suite">Choose files…</button>
+      <input type="file" id="suite-files" multiple accept=".nxb,.json,.csv,.NXB,.JSON,.CSV,application/json,text/csv,application/octet-stream" hidden>
+      <button type="button" id="clear-upload" hidden>Clear</button>
+    </div>
+    <span id="upload-summary" class="upload-summary empty">No files selected — using size buttons above.</span>
   </div>
 
   <div class="sizes-info" id="sizes-info"></div>
@@ -380,11 +416,25 @@ function sumCsvScore(str) {
 // ── Main ──────────────────────────────────────────────────────────────────
 
 let selectedN = 10000;
+/** When set, Run uses uploaded buffers instead of fetch(fixtures). */
+let uploadedSuite = null;
+
+function restoreSizeButtonActive() {
+  document.querySelectorAll("#sizes button").forEach(b => {
+    b.classList.toggle("active", parseInt(b.dataset.n, 10) === selectedN);
+  });
+}
+
 document.querySelectorAll("#sizes button").forEach(btn => {
   btn.addEventListener("click", () => {
+    uploadedSuite = null;
     document.querySelectorAll("#sizes button").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     selectedN = parseInt(btn.dataset.n, 10);
+    $("#upload-summary").textContent = "No files selected — using size buttons above.";
+    $("#upload-summary").classList.add("empty");
+    $("#clear-upload").hidden = true;
+    $("#suite-files").value = "";
   });
 });
 
@@ -439,6 +489,24 @@ async function fetchBytesSafe(url) {
   }
 }
 
+function buildEntryFromBuffers(nxbBuf, jsonBytes, csvBytes, jsonMissingErr, csvMissingErr) {
+  const jsonDec = jsonBytes?.byteLength
+    ? bytesToStringSafe(jsonBytes)
+    : { err: jsonMissingErr ?? "not uploaded" };
+  const csvDec = csvBytes?.byteLength
+    ? bytesToStringSafe(csvBytes)
+    : { err: csvMissingErr ?? "not uploaded" };
+  return {
+    nxbBuf,
+    jsonBytes,
+    csvBytes,
+    jsonStr: jsonDec.str,
+    csvStr: csvDec.str,
+    jsonErr: jsonDec.err,
+    csvErr: csvDec.err,
+  };
+}
+
 async function loadFixtures(n) {
   if (fetchCache.has(n)) return fetchCache.get(n);
 
@@ -452,24 +520,89 @@ async function loadFixtures(n) {
   if (nRes.err) throw new Error(`NXS fetch failed: ${nRes.err}`);
   const nxbBuf = nRes.bytes;
   const jsonBytes = jRes.bytes;
-  const csvBytes  = cRes.bytes;
+  const csvBytes = cRes.bytes;
 
-  // Try to decode JSON/CSV as strings — may throw if over the engine's cap.
-  const jsonDec = jsonBytes ? bytesToStringSafe(jsonBytes) : { err: `fetch: ${jRes.err}` };
-  const csvDec  = csvBytes  ? bytesToStringSafe(csvBytes)  : { err: `fetch: ${cRes.err}` };
-
-  const entry = {
+  const entry = buildEntryFromBuffers(
     nxbBuf,
     jsonBytes,
     csvBytes,
-    jsonStr: jsonDec.str,
-    csvStr:  csvDec.str,
-    jsonErr: jsonDec.err,
-    csvErr:  csvDec.err,
-  };
+    jsonBytes ? undefined : `fetch: ${jRes.err}`,
+    csvBytes ? undefined : `fetch: ${cRes.err}`,
+  );
   fetchCache.set(n, entry);
   return entry;
 }
+
+async function applyUploadedFiles(fileList) {
+  const files = [...fileList];
+  let nxbFile = null;
+  let jsonFile = null;
+  let csvFile = null;
+  for (const f of files) {
+    const low = f.name.toLowerCase();
+    if (low.endsWith(".nxb")) nxbFile = f;
+    else if (low.endsWith(".json")) jsonFile = f;
+    else if (low.endsWith(".csv")) csvFile = f;
+  }
+  if (!nxbFile) {
+    setStatus("Pick at least one .nxb file (optional .json / .csv for comparison).", "error");
+    return;
+  }
+  const nxbBuf = new Uint8Array(await nxbFile.arrayBuffer());
+  let n;
+  try {
+    n = new NxsReader(nxbBuf).recordCount;
+  } catch (e) {
+    setStatus(`Not a valid .nxb: ${e.message}`, "error");
+    return;
+  }
+  const jsonBytes = jsonFile ? new Uint8Array(await jsonFile.arrayBuffer()) : undefined;
+  const csvBytes = csvFile ? new Uint8Array(await csvFile.arrayBuffer()) : undefined;
+  const entry = buildEntryFromBuffers(
+    nxbBuf,
+    jsonBytes,
+    csvBytes,
+    jsonFile ? undefined : "not uploaded",
+    csvFile ? undefined : "not uploaded",
+  );
+  uploadedSuite = { n, entry };
+  const parts = [nxbFile.name];
+  if (jsonFile) parts.push(jsonFile.name);
+  if (csvFile) parts.push(csvFile.name);
+  $("#upload-summary").textContent = `Using upload: ${parts.join(" + ")} — n=${n.toLocaleString()}`;
+  $("#upload-summary").classList.remove("empty");
+  $("#clear-upload").hidden = false;
+  document.querySelectorAll("#sizes button").forEach(b => b.classList.remove("active"));
+  setStatus("Files loaded — click Run benchmark.", "done");
+}
+
+const uploadDrop = $("#upload-drop");
+const suiteInput = $("#suite-files");
+$("#pick-suite").addEventListener("click", () => suiteInput.click());
+suiteInput.addEventListener("change", async () => {
+  const fl = suiteInput.files;
+  if (fl?.length) await applyUploadedFiles(fl);
+  suiteInput.value = "";
+});
+;["dragenter", "dragover"].forEach(t =>
+  uploadDrop.addEventListener(t, e => { e.preventDefault(); uploadDrop.classList.add("drag"); }));
+;["dragleave", "drop"].forEach(t =>
+  uploadDrop.addEventListener(t, e => {
+    e.preventDefault();
+    if (t === "dragleave" && e.target !== uploadDrop) return;
+    uploadDrop.classList.remove("drag");
+  }));
+uploadDrop.addEventListener("drop", async e => {
+  const fl = e.dataTransfer?.files;
+  if (fl?.length) await applyUploadedFiles(fl);
+});
+$("#clear-upload").addEventListener("click", () => {
+  uploadedSuite = null;
+  $("#upload-summary").textContent = "No files selected — using size buttons above.";
+  $("#upload-summary").classList.add("empty");
+  $("#clear-upload").hidden = true;
+  restoreSizeButtonActive();
+});
 
 // Helper: run a scenario with a failure guard. If `failed` is true, emit a
 // failed row directly; otherwise invoke `run()` which returns ms.
@@ -479,32 +612,34 @@ function scenario(label, klass, failed, failText, run) {
 }
 
 $("#run").addEventListener("click", async () => {
-  const n = selectedN;
   $("#run").disabled = true;
 
   try {
+    const n = uploadedSuite ? uploadedSuite.n : selectedN;
     const {
       nxbBuf, jsonBytes, csvBytes,
       jsonStr, csvStr, jsonErr, csvErr,
-    } = await loadFixtures(n);
+    } = uploadedSuite ? uploadedSuite.entry : await loadFixtures(n);
 
     // Size info
     const jsonLen = jsonBytes?.length ?? 0;
-    const csvLen  = csvBytes?.length ?? 0;
+    const csvLen = csvBytes?.length ?? 0;
     const nxbPct = jsonLen ? (nxbBuf.length / jsonLen * 100).toFixed(0) : "?";
     const csvPct = jsonLen ? (csvLen / jsonLen * 100).toFixed(0) : "?";
+    const srcLabel = uploadedSuite ? "uploaded" : `records_${n}`;
     $("#sizes-info").innerHTML = `
+      <span class="tag">${srcLabel}</span>
       <span class="tag">.nxb ${fmtBytes(nxbBuf.length)} (${nxbPct}% of JSON)</span>
-      <span class="tag">.json ${jsonBytes ? fmtBytes(jsonLen) : `fetch failed: ${jsonErr}`}</span>
-      <span class="tag">.csv ${csvBytes ? fmtBytes(csvLen) : `fetch failed: ${csvErr}`} ${csvBytes ? `(${csvPct}% of JSON)` : ""}</span>
+      <span class="tag">.json ${jsonBytes ? fmtBytes(jsonLen) : jsonErr}</span>
+      <span class="tag">.csv ${csvBytes ? fmtBytes(csvLen) : csvErr} ${csvBytes ? `(${csvPct}% of JSON)` : ""}</span>
     `;
 
     // Iteration counts scaled to each op's cost
     const iters = {
-      parse: n >= 1e7 ? 3 : n >= 1e6 ? 5  : n >= 1e5 ? 20  : 200,
+      parse: n >= 1e7 ? 3 : n >= 1e6 ? 5 : n >= 1e5 ? 20 : 200,
       random: n >= 1e7 ? 20000 : n >= 1e6 ? 50000 : 100000,
-      cold:  n >= 1e7 ? 2 : n >= 1e6 ? 3  : n >= 1e5 ? 20  : 200,
-      scan:  n >= 1e7 ? 2 : n >= 1e6 ? 3  : n >= 1e5 ? 20  : 500,
+      cold: n >= 1e7 ? 2 : n >= 1e6 ? 3 : n >= 1e5 ? 20 : 200,
+      scan: n >= 1e7 ? 2 : n >= 1e6 ? 3 : n >= 1e5 ? 20 : 500,
     };
 
     setStatus(`Running (n=${n.toLocaleString()})…`, "running");
@@ -528,9 +663,13 @@ $("#run").addEventListener("click", async () => {
       try { parsedCsv = parseCsv(csvStr); }
       catch (e) { csvParseErr = e.message; }
     }
+    if (parsedJson && parsedJson.length !== n) {
+      jsonParseErr = `${parsedJson.length} JSON rows ≠ NXS recordCount ${n}`;
+      parsedJson = undefined;
+    }
 
-    const jsonFailText = jsonErr ? jsonErr : jsonParseErr ? `JSON.parse: ${jsonParseErr}` : null;
-    const csvFailText  = csvErr  ? csvErr  : csvParseErr  ? `parseCsv: ${csvParseErr}`    : null;
+    const jsonFailText = jsonErr ? jsonErr : jsonParseErr ? `JSON: ${jsonParseErr}` : null;
+    const csvFailText = csvErr ? csvErr : csvParseErr ? `CSV: ${csvParseErr}` : null;
 
     // Precompute indices & slots used by multiple scenarios
     const idxs = new Array(iters.random);

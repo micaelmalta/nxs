@@ -128,11 +128,6 @@ func u16(b []byte, off int) uint16 {
 }
 
 //go:nosplit
-func u32(b []byte, off int) uint32 {
-	return *(*uint32)(unsafe.Pointer(&b[off]))
-}
-
-//go:nosplit
 func u64(b []byte, off int) uint64 {
 	return *(*uint64)(unsafe.Pointer(&b[off]))
 }

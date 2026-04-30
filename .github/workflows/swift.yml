@@ -2,26 +2,29 @@ name: Swift
 
 on:
   push:
-    paths: ['swift/**', '.github/workflows/swift.yml', '.github/workflows/fixtures.yml']
+    paths: ['swift/**', 'Makefile', '.github/workflows/swift.yml']
   pull_request:
-    paths: ['swift/**', '.github/workflows/swift.yml', '.github/workflows/fixtures.yml']
+    paths: ['swift/**', 'Makefile', '.github/workflows/swift.yml']
 
 jobs:
-  fixtures:
-    uses: ./.github/workflows/fixtures.yml
-
-  test:
-    needs: fixtures
+  ci:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
-        with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+      - run: brew install swiftlint 2>/dev/null || true
+      - run: make lint-swift
 
-      - name: Test
-        working-directory: swift
-        run: swift run nxs-test ../js/fixtures
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-swift-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
+
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-swift

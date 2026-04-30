@@ -187,27 +187,32 @@ async function runScale(fixtureDir, n, wasm) {
   // ── 4. Full scan (per-record) ────────────────────────────────────────────
   header("Full scan — sum of 'score' (per-record API)");
   const jsonIter = bench(iterateIters, () => {
-    let s = 0;
-    for (const r of parsedJson) s += r.score;
+    let sum = 0;
+    for (const r of parsedJson) sum += r.score;
+    return sum;
   });
   const csvIter = bench(iterateIters, () => {
-    let s = 0;
-    for (const r of parsedCsv) s += +r.score;
+    let sum = 0;
+    for (const r of parsedCsv) sum += +r.score;
+    return sum;
   });
   const nxsIter = bench(iterateIters, () => {
-    let s = 0;
-    for (const r of reader.records()) s += r.getF64("score");
+    let sum = 0;
+    for (const r of reader.records()) sum += r.getF64("score");
+    return sum;
   });
   const scoreSlot = reader.slot("score");
   const nxsIterSlot = bench(iterateIters, () => {
-    let s = 0;
+    let sum = 0;
     const rc = reader.recordCount;
-    for (let i = 0; i < rc; i++) s += reader.record(i).getF64BySlot(scoreSlot);
+    for (let i = 0; i < rc; i++) sum += reader.record(i).getF64BySlot(scoreSlot);
+    return sum;
   });
   // Cursor-based scan: reuses one NxsCursor across all records
   const nxsIterCursor = bench(iterateIters, () => {
-    let s = 0;
-    reader.scan(cur => { s += cur.getF64BySlot(scoreSlot); });
+    let sum = 0;
+    reader.scan(cur => { sum += cur.getF64BySlot(scoreSlot); });
+    return sum;
   });
   row("for (r of arr) s += r.score  (JSON)",      jsonIter,      jsonIter);
   row("for (r of arr) s += +r.score (CSV)",        csvIter,       jsonIter);
@@ -219,7 +224,9 @@ async function runScale(fixtureDir, n, wasm) {
   // ── 5. Columnar / reducer ────────────────────────────────────────────────
   header("Columnar scan — same sum, using bulk APIs");
   const jsonBulk = bench(iterateIters, () => {
-    let s = 0; for (const r of parsedJson) s += r.score;
+    let sum = 0;
+    for (const r of parsedJson) sum += r.score;
+    return sum;
   });
   const csvBulk  = bench(iterateIters, () => sumCsvScore(csvStr));
   const nxsBulk  = bench(iterateIters, () => reader.sumF64("score"));

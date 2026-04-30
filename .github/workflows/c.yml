@@ -2,28 +2,30 @@ name: C
 
 on:
   push:
-    paths: ['c/**', '.github/workflows/c.yml', '.github/workflows/fixtures.yml']
+    paths: ['c/**', 'Makefile', '.github/workflows/c.yml']
   pull_request:
-    paths: ['c/**', '.github/workflows/c.yml', '.github/workflows/fixtures.yml']
+    paths: ['c/**', 'Makefile', '.github/workflows/c.yml']
 
 jobs:
-  fixtures:
-    uses: ./.github/workflows/fixtures.yml
-
-  test:
-    needs: fixtures
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
-        with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+      - run: sudo apt-get update && sudo apt-get install -y cppcheck
 
-      - name: Build and test
-        working-directory: c
-        run: |
-          make test
-          ./test ../js/fixtures
+      - run: make lint-c
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-c-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
+
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-c

@@ -2,16 +2,12 @@ name: PHP
 
 on:
   push:
-    paths: ['php/**', '.github/workflows/php.yml', '.github/workflows/fixtures.yml']
+    paths: ['php/**', 'Makefile', '.github/workflows/php.yml']
   pull_request:
-    paths: ['php/**', '.github/workflows/php.yml', '.github/workflows/fixtures.yml']
+    paths: ['php/**', 'Makefile', '.github/workflows/php.yml']
 
 jobs:
-  fixtures:
-    uses: ./.github/workflows/fixtures.yml
-
-  test:
-    needs: fixtures
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,19 +15,19 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          tools: none
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
+      - run: make lint-php
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
         with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-php-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
 
-      - name: Test (pure PHP)
-        run: php php/test.php js/fixtures
-
-      - name: Build C extension
-        run: bash php/nxs_ext/build.sh
-
-      - name: Test (C extension)
-        run: php -d extension=php/nxs_ext/modules/nxs.so php/test.php js/fixtures
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-php-ci

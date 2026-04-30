@@ -365,7 +365,7 @@ func TestWriterManyFields(t *testing.T) {
 	schema := NewSchema(keys)
 	w := NewWriter(schema)
 	w.BeginObject()
-	for i, _ := range keys {
+	for i := range keys {
 		w.WriteI64(i, int64(i*100))
 	}
 	w.EndObject()

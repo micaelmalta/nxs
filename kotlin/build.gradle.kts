@@ -4,6 +4,7 @@ plugins {
     `maven-publish`
     signing
     id("io.github.gradle-nexus.publish-plugin") version "2.0.0"
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.2"
 }
 
 group = "io.github.micaelmalta"
@@ -24,6 +25,14 @@ tasks.register<JavaExec>("bench") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("nxs.BenchKt")
     args = listOf("../js/fixtures")
+}
+
+tasks.register<JavaExec>("conformance") {
+    group = "verification"
+    description = "Run NXS conformance vectors (expects ../conformance/ from kotlin/)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("nxs.ConformanceKt")
+    args("../conformance/")
 }
 
 kotlin {

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # NXS Reader — .nxb parser (Ruby 3.x, stdlib only).
 #
 # Implements Nexus Standard v1.0 binary wire format.
@@ -26,6 +27,7 @@ module Nxs
 
   class NxsError < StandardError
     attr_reader :code
+
     def initialize(code, msg)
       super("#{code}: #{msg}")
       @code = code
@@ -38,21 +40,21 @@ module Nxs
     attr_reader :keys, :record_count
 
     def initialize(bytes)
-      @data = bytes.b   # force binary encoding
+      @data = bytes.b # force binary encoding
       sz = @data.bytesize
-      raise NxsError.new("ERR_OUT_OF_BOUNDS", "file too small") if sz < 32
+      raise NxsError.new('ERR_OUT_OF_BOUNDS', 'file too small') if sz < 32
 
-      magic = @data.unpack1("L<")
-      raise NxsError.new("ERR_BAD_MAGIC", "expected NXSB, got 0x#{magic.to_s(16)}") if magic != MAGIC_FILE
+      magic = @data.unpack1('L<')
+      raise NxsError.new('ERR_BAD_MAGIC', "expected NXSB, got 0x#{magic.to_s(16)}") if magic != MAGIC_FILE
 
       footer = @data.unpack1("@#{sz - 4}L<")
-      raise NxsError.new("ERR_BAD_MAGIC", "footer magic mismatch") if footer != MAGIC_FOOTER
+      raise NxsError.new('ERR_BAD_MAGIC', 'footer magic mismatch') if footer != MAGIC_FOOTER
 
       # Preamble: Version(2) + Flags(2) + DictHash(8) + TailPtr(8) + Reserved(8)
-      @flags    = @data.unpack1("@6 S<")
-      @tail_ptr = @data.unpack1("@16 Q<")
+      @flags    = @data.unpack1('@6 S<')
+      @tail_ptr = @data.unpack1('@16 Q<')
 
-      @dict_hash = @data.unpack1("@8 Q<")
+      @dict_hash = @data.unpack1('@8 Q<')
 
       # Schema (when Flags bit 1 set)
       @keys       = []
@@ -61,7 +63,7 @@ module Nxs
       if @flags & FLAG_SCHEMA != 0
         schema_end = read_schema(32)
         computed = murmur3_64(@data[32...schema_end].bytes)
-        raise NxsError.new("ERR_DICT_MISMATCH", "schema hash mismatch") if computed != @dict_hash
+        raise NxsError.new('ERR_DICT_MISMATCH', 'schema hash mismatch') if computed != @dict_hash
       end
 
       # Tail-index: u32 EntryCount followed by records
@@ -72,8 +74,9 @@ module Nxs
     # O(1) record lookup — reads one 10-byte tail-index entry.
     def record(i)
       unless i >= 0 && i < @record_count
-        raise NxsError.new("ERR_OUT_OF_BOUNDS", "record #{i} out of [0, #{@record_count})")
+        raise NxsError.new('ERR_OUT_OF_BOUNDS', "record #{i} out of [0, #{@record_count})")
       end
+
       # Each tail-index entry: u16 KeyID + u64 AbsoluteOffset = 10 bytes
       abs_offset = @data.unpack1("@#{@tail_start + i * 10 + 2}Q<")
       Object.new(self, abs_offset)
@@ -82,7 +85,8 @@ module Nxs
     # Tight allocation-free sum loop.
     def sum_f64(key)
       slot = @key_index[key]
-      raise NxsError.new("ERR_OUT_OF_BOUNDS", "key '#{key}' not in schema") unless slot
+      raise NxsError.new('ERR_OUT_OF_BOUNDS', "key '#{key}' not in schema") unless slot
+
       data = @data
       tail = @tail_start
       n    = @record_count
@@ -99,7 +103,8 @@ module Nxs
 
     def min_f64(key)
       slot = @key_index[key]
-      raise NxsError.new("ERR_OUT_OF_BOUNDS", "key '#{key}' not in schema") unless slot
+      raise NxsError.new('ERR_OUT_OF_BOUNDS', "key '#{key}' not in schema") unless slot
+
       data = @data
       tail = @tail_start
       n    = @record_count
@@ -119,7 +124,8 @@ module Nxs
 
     def max_f64(key)
       slot = @key_index[key]
-      raise NxsError.new("ERR_OUT_OF_BOUNDS", "key '#{key}' not in schema") unless slot
+      raise NxsError.new('ERR_OUT_OF_BOUNDS', "key '#{key}' not in schema") unless slot
+
       data = @data
       tail = @tail_start
       n    = @record_count
@@ -139,7 +145,8 @@ module Nxs
 
     def sum_i64(key)
       slot = @key_index[key]
-      raise NxsError.new("ERR_OUT_OF_BOUNDS", "key '#{key}' not in schema") unless slot
+      raise NxsError.new('ERR_OUT_OF_BOUNDS', "key '#{key}' not in schema") unless slot
+
       data = @data
       tail = @tail_start
       n    = @record_count
@@ -161,7 +168,7 @@ module Nxs
     # and return the absolute byte offset of the field value (or nil if absent).
     # Used by both bulk reducers and NxsObject.
     def _scan_offset(data, obj_offset, slot)
-      p = obj_offset + 8   # skip Magic(4) + Length(4)
+      p = obj_offset + 8 # skip Magic(4) + Length(4)
       cur   = 0
       t_idx = 0
 
@@ -172,7 +179,8 @@ module Nxs
         7.times do |i|
           if cur == slot
             # field absent if bit is 0
-            return nil if (bits >> i) & 1 == 0
+            return nil if ((bits >> i) & 1).zero?
+
             # p already past this bitmask byte; drain remaining continuation bytes
             while (b & 0x80) != 0
               b = data.getbyte(p)
@@ -186,7 +194,7 @@ module Nxs
           cur += 1
         end
         # If all 7 bits processed and continuation bit clear, field is absent
-        return nil if (b & 0x80) == 0
+        return nil if (b & 0x80).zero?
       end
     end
 
@@ -204,7 +212,7 @@ module Nxs
       pos  = 0
       key_count.times do |i|
         term = pool.index("\x00", pos)
-        @keys << pool[pos...term].force_encoding("UTF-8")
+        @keys << pool[pos...term].force_encoding('UTF-8')
         @key_index[@keys.last] = i
         pos = term + 1
       end
@@ -255,25 +263,29 @@ module Nxs
     def get_str(key)
       off = field_offset(key)
       return nil unless off
+
       len = @reader.data.unpack1("@#{off}L<")
-      @reader.data[off + 4, len].force_encoding("UTF-8")
+      @reader.data[off + 4, len].force_encoding('UTF-8')
     end
 
     def get_i64(key)
       off = field_offset(key)
       return nil unless off
+
       @reader.data.unpack1("@#{off}q<")
     end
 
     def get_f64(key)
       off = field_offset(key)
       return nil unless off
+
       @reader.data.unpack1("@#{off}E")
     end
 
     def get_bool(key)
       off = field_offset(key)
       return nil unless off
+
       @reader.data.getbyte(off) != 0
     end
 
@@ -282,18 +294,20 @@ module Nxs
     # Parse the object header (lazy — only on first field access).
     def parse_header
       return if @parsed
+
       p = @offset
 
       magic = @reader.data.unpack1("@#{p}L<")
-      raise NxsError.new("ERR_BAD_MAGIC", "expected NXSO at #{p}") if magic != MAGIC_OBJ
-      p += 8  # skip Magic(4) + Length(4)
+      raise NxsError.new('ERR_BAD_MAGIC', "expected NXSO at #{p}") if magic != MAGIC_OBJ
+
+      p += 8 # skip Magic(4) + Length(4)
 
       bitmask = []
       loop do
         b = @reader.data.getbyte(p)
         p += 1
         bitmask << (b & 0x7F)
-        break if (b & 0x80) == 0
+        break if (b & 0x80).zero?
       end
 
       @bitmask          = bitmask

@@ -3,11 +3,7 @@ name: Publish Kotlin (Maven Central)
 on:
   workflow_dispatch:
 jobs:
-  test:
-    uses: ./.github/workflows/fixtures.yml
-
   publish:
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,15 +15,19 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
-        with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Run tests
-        working-directory: kotlin
-        run: ./gradlew run --args="../js/fixtures" --no-daemon -q
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-publish-kotlin-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
+
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-kotlin
 
       - name: Publish to Maven Central
         working-directory: kotlin

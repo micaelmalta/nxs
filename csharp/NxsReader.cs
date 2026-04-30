@@ -26,23 +26,23 @@ public sealed class NxsException(string code, string msg)
 
 public sealed class NxsReader
 {
-    private const uint MagicFile   = 0x4E585342u;
-    private const uint MagicObj    = 0x4E58534Fu;
-    private const uint MagicList   = 0x4E58534Cu;
+    private const uint MagicFile = 0x4E585342u;
+    private const uint MagicObj = 0x4E58534Fu;
+    private const uint MagicList = 0x4E58534Cu;
     private const uint MagicFooter = 0x2153584Eu;
     private const ushort FlagSchema = 0x0002;
 
     private readonly byte[] _data;
 
-    public ushort  Version   { get; }
-    public ushort  Flags     { get; }
-    public ulong   DictHash  { get; }
-    public ulong   TailPtr   { get; }
-    public string[] Keys     { get; }
-    public byte[]  KeySigils { get; }
+    public ushort Version { get; }
+    public ushort Flags { get; }
+    public ulong DictHash { get; }
+    public ulong TailPtr { get; }
+    public string[] Keys { get; }
+    public byte[] KeySigils { get; }
 
     private readonly Dictionary<string, int> _keyIndex;
-    public  int RecordCount { get; }
+    public int RecordCount { get; }
     private readonly int _tailStart;
 
     public NxsReader(byte[] data)
@@ -50,15 +50,15 @@ public sealed class NxsReader
         _data = data;
         int size = data.Length;
         if (size < 32) throw new NxsException("ERR_OUT_OF_BOUNDS", "file too small");
-        if (RdU32(0) != MagicFile)   throw new NxsException("ERR_BAD_MAGIC", "preamble");
+        if (RdU32(0) != MagicFile) throw new NxsException("ERR_BAD_MAGIC", "preamble");
         if (RdU32(size - 4) != MagicFooter) throw new NxsException("ERR_BAD_MAGIC", "footer");
 
-        Version  = RdU16(4);
-        Flags    = RdU16(6);
+        Version = RdU16(4);
+        Flags = RdU16(6);
         DictHash = RdU64(8);
-        TailPtr  = RdU64(16);
+        TailPtr = RdU64(16);
 
-        var ks   = Array.Empty<string>();
+        var ks = Array.Empty<string>();
         var kSig = Array.Empty<byte>();
         _keyIndex = new Dictionary<string, int>();
 
@@ -85,13 +85,13 @@ public sealed class NxsReader
                 throw new NxsException("ERR_DICT_MISMATCH", "schema hash mismatch");
         }
 
-        Keys      = ks;
+        Keys = ks;
         KeySigils = kSig;
 
         int tp = (int)TailPtr;
         if (tp + 4 > size) throw new NxsException("ERR_OUT_OF_BOUNDS", "tail index");
         RecordCount = (int)RdU32(tp);
-        _tailStart  = tp + 4;
+        _tailStart = tp + 4;
     }
 
     public int Slot(string key)
@@ -105,7 +105,7 @@ public sealed class NxsReader
         if ((uint)i >= (uint)RecordCount)
             throw new NxsException("ERR_OUT_OF_BOUNDS", $"record {i} out of [0, {RecordCount})");
         int entryOff = _tailStart + i * 10 + 2;
-        int absOff   = (int)RdU64(entryOff);
+        int absOff = (int)RdU64(entryOff);
         return new NxsObject(this, absOff);
     }
 
@@ -213,7 +213,8 @@ public sealed class NxsReader
         const ulong C2 = 0xC4CEB9FE1A85EC53UL;
         ulong h = 0x93681D6255313A99UL;
         int p = offset, end = offset + length;
-        while (p < end) {
+        while (p < end)
+        {
             ulong k = 0;
             for (int i = 0; i < 8 && p + i < end; i++)
                 k |= (ulong)data[p + i] << (i * 8);
@@ -314,10 +315,10 @@ public sealed class NxsObject
         }
     }
 
-    public long   GetI64(string key)  => GetI64BySlot(_reader.Slot(key));
-    public double GetF64(string key)  => GetF64BySlot(_reader.Slot(key));
-    public bool   GetBool(string key) => GetBoolBySlot(_reader.Slot(key));
-    public string GetStr(string key)  => GetStrBySlot(_reader.Slot(key));
+    public long GetI64(string key) => GetI64BySlot(_reader.Slot(key));
+    public double GetF64(string key) => GetF64BySlot(_reader.Slot(key));
+    public bool GetBool(string key) => GetBoolBySlot(_reader.Slot(key));
+    public string GetStr(string key) => GetStrBySlot(_reader.Slot(key));
 
     public long GetI64BySlot(int slot)
     {

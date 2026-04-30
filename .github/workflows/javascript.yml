@@ -2,16 +2,12 @@ name: JavaScript
 
 on:
   push:
-    paths: ['js/**', '.github/workflows/javascript.yml', '.github/workflows/fixtures.yml']
+    paths: ['js/**', 'Makefile', '.github/workflows/javascript.yml']
   pull_request:
-    paths: ['js/**', '.github/workflows/javascript.yml', '.github/workflows/fixtures.yml']
+    paths: ['js/**', 'Makefile', '.github/workflows/javascript.yml']
 
 jobs:
-  fixtures:
-    uses: ./.github/workflows/fixtures.yml
-
-  test:
-    needs: fixtures
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,11 +16,18 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Download fixtures
-        uses: actions/download-artifact@v4
-        with:
-          name: fixtures-${{ github.sha }}
-          path: js/fixtures/
+      - run: make lint-js
 
-      - name: Test
-        run: node js/test.js js/fixtures
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-js-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
+
+      - run: make fixtures FIXTURE_COUNT=1000
+      - run: make test-js

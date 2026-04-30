@@ -70,14 +70,17 @@ test("record(999) last record active flag matches", () => {
 test("out-of-bounds record throws", () => {
   const r = new NxsReader(buf);
   let threw = false;
-  try { r.record(10000); } catch (e) { threw = true; }
+  try { r.record(10000); } catch { threw = true; }
   assertEq(threw, true);
 });
 
 test("iteration visits every record", () => {
   const r = new NxsReader(buf);
   let count = 0;
-  for (const _ of r.records()) count++;
+  for (const rec of r.records()) {
+    void rec;
+    count++;
+  }
   assertEq(count, 1000);
 });
 
@@ -123,7 +126,7 @@ test("bad magic throws ERR_BAD_MAGIC", () => {
 test("truncated file throws ERR_OUT_OF_BOUNDS", () => {
   const bad = buf.slice(0, 16);
   let threw = false;
-  try { new NxsReader(bad); } catch (e) { threw = true; }
+  try { new NxsReader(bad); } catch { threw = true; }
   if (!threw) throw new Error("expected error on truncated file");
 });
 
