@@ -105,6 +105,60 @@ cd js && python3 server.py   # required for SharedArrayBuffer (sets COOP/COEP he
 
 ---
 
+## Example
+
+A `.nxs` source file is plain text. Every value carries a sigil that declares its machine type:
+
+```text
+user {
+    id:         =42
+    username:   "alice_wonder"
+    email:      "alice@example.com"
+    age:        =31
+    balance:    ~2874.99
+    active:     ?true
+    role:       $admin
+    created_at: @2022-03-15
+    tags:       [$admin, $beta, $verified]
+    address {
+        city:    "Springfield"
+        country: "US"
+    }
+}
+```
+
+Compile it with the Rust tool:
+
+```bash
+./target/release/nxs user_profile.nxs
+# compiled user_profile.nxs → user_profile.nxb (312 bytes)
+```
+
+Read one field from the binary in any language without loading the rest:
+
+```js
+// JavaScript
+const reader = new NxsReader(await fetch("user_profile.nxb").then(r => r.arrayBuffer()));
+reader.record(0).getStr("username");  // "alice_wonder" — decoded on access
+```
+
+```go
+// Go
+r, _ := nxs.NewReader(data)
+obj := r.Record(0)
+username, _ := obj.GetStr("username")  // "alice_wonder"
+```
+
+```python
+# Python
+reader = NxsReader(open("user_profile.nxb", "rb").read())
+reader.record(0).get_str("username")  # "alice_wonder"
+```
+
+More examples in [`examples/`](./examples/) and [`GETTING_STARTED.md`](./GETTING_STARTED.md).
+
+---
+
 ## Format Overview
 
 A `.nxb` file is four segments: a 32-byte preamble, an embedded schema header, a data sector, and a tail-index. The tail-index holds one `(KeyID, AbsoluteOffset)` pair per top-level record and is located by reading the last 8 bytes — enabling O(1) random access with a single seek. All atomic values are 8-byte aligned, allowing zero-copy reads on any little-endian platform.
