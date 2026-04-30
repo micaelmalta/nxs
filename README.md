@@ -131,10 +131,14 @@ user {
 | :--- | :--- | :--- |
 | `=` | Int64 | 8 bytes LE |
 | `~` | Float64 | 8 bytes IEEE 754 LE |
-| `?` | Bool | 1 byte + 7 padding |
+| `?` | Bool | 1 byte + 7 bytes padding |
 | `$` | Keyword (interned) | 2-byte dict index |
 | `"` | String | u32 length + UTF-8 bytes |
 | `@` | Timestamp (Unix ns) | 8 bytes LE |
+| `<>` | Binary blob | u32 length + raw bytes |
+| `&` | Link | 4-byte relative offset |
+| `!` | Macro | Resolved at compile time |
+| `^` | Null | Zero-width (bitmask bit set) |
 
 More examples in [`examples/`](./examples/) and full API usage in [`GETTING_STARTED.md`](./GETTING_STARTED.md).
 
