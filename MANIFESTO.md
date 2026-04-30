@@ -46,7 +46,7 @@ user {
 }
 ```
 
-The Rust compiler reads this text and writes a `.nxb` file. That file is what all six language implementations consume. It is not compiled once and read once. It is compiled once and read arbitrarily, in O(1) per record, across whatever languages your stack happens to use.
+The Rust compiler reads this text and writes a `.nxb` file. That file is what all ten language implementations consume. It is not compiled once and read once. It is compiled once and read arbitrarily, in O(1) per record, across whatever languages your stack happens to use.
 
 ---
 
@@ -64,13 +64,15 @@ Three decisions make the binary format fast enough to matter.
 
 ## What the numbers say
 
-On 1M records, across six implementations, on the same machine:
+On 1M records, across ten implementations, on the same machine:
 
 Opening and reading one field from a 1.5 GB file: under 2 microseconds for NXS. JSON throws `Invalid string length`. CSV runs out of memory.
 
-A Go cold pipeline — open the file, sum a float column over 1M records — takes 10.9 ms in NXS versus 1.05 seconds parsing JSON. 105× faster, not because of tricks, because the format was designed for the task.
+A Go cold pipeline — open the file, sum a float column over 1M records — takes 13.5 ms in NXS versus 1.05 seconds parsing JSON. 78× faster, not because of tricks, because the format was designed for the task.
 
-In the browser, at 60 FPS, NXS patches a value in place as a direct byte write. JSON re-parses the full payload on every frame.
+Kotlin's `sumF64` runs in 4.3 ms against 1,286 ms from org.json — 296× faster. Swift's `sumF64` runs in 8.2 ms against 2,038 ms from JSONSerialization — 249× faster. C#'s `SumF64` runs in 8.8 ms against 292 ms from System.Text.Json — 33× faster. Across every language, the pattern holds: the format's access model matches the workload.
+
+In the browser, at 60 FPS, NXS patches a value in place as a direct byte write. JSON re-parses the full payload on every frame. Fanning out to 4 Web Workers costs 25 µs for NXS versus 68 ms for JSON — a 2,700× difference — because NXS passes a SharedArrayBuffer pointer; JSON structured-clones 57 MB per worker.
 
 These are not cherrypicked microbenchmarks. They reflect what happens when a format's access model matches the workload.
 
@@ -82,7 +84,7 @@ NXS is not a replacement for JSON over HTTP. JSON is excellent there.
 
 NXS is not a database. It has no query planner, no indexing beyond the tail-index, no transaction model.
 
-NXS is not finished. The spec is complete. The six language implementations pass their test suites. The binary layout is not yet frozen. There are no versioned releases, no stability guarantees, no conformance test suite. This is a proof of concept, written to test whether the design holds together under real implementation pressure.
+NXS is not finished. The spec is complete. The ten language implementations pass their test suites. The binary layout is not yet frozen. There are no versioned releases, no stability guarantees, no conformance test suite. This is a proof of concept, written to test whether the design holds together under real implementation pressure.
 
 It does.
 
@@ -102,9 +104,9 @@ It does.
 
 ---
 
-## Six languages, one format
+## Ten languages, one format
 
-The reference implementations cover Rust, JavaScript, Python, Go, Ruby, and PHP. Each reads the same `.nxb` file. Each exposes the same lookup model: resolve a key to a slot index once, reuse it across all records. Each provides columnar reducers for aggregate queries. Some provide C extensions. The JavaScript implementation works in Node, in the browser, and in Web Workers sharing a `SharedArrayBuffer` with zero bytes copied between threads.
+The reference implementations cover Rust, JavaScript, Python, Go, Ruby, PHP, C, Swift, Kotlin, and C#. Each reads the same `.nxb` file. Each exposes the same lookup model: resolve a key to a slot index once, reuse it across all records. Each provides columnar reducers for aggregate queries. Python, Ruby, and PHP also ship C extensions for maximum throughput. The JavaScript implementation works in Node, in the browser, and in Web Workers sharing a `SharedArrayBuffer` with zero bytes copied between threads.
 
 The point is not comprehensiveness for its own sake. The point is that a `.nxb` file is not owned by one ecosystem. It is a shared artifact. The writer can be Rust; the readers can be anything.
 
@@ -112,7 +114,7 @@ The point is not comprehensiveness for its own sake. The point is that a `.nxb` 
 
 ## An invitation
 
-The spec is in `SPEC.md`. The RFC with security guidance and implementation notes is in `RFC.md`. Working code for all six languages is in this repository. The browser demos show the format under conditions — 14 million records, 60 FPS frame updates, virtual scroll over 10 million log lines — that motivated the design.
+The spec is in `SPEC.md`. The RFC with security guidance and implementation notes is in `RFC.md`. Working code for all ten languages is in this repository. The browser demos — live at [nxs.covibe.us](https://nxs.covibe.us/index.html) — show the format under conditions that motivated the design: 14 million records, 60 FPS frame updates, 4 workers sharing one buffer, virtual scroll over 10 million log lines.
 
 Implement it, break it, tell us where the spec is ambiguous. That is how a proof of concept becomes a standard.
 
