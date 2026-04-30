@@ -12,7 +12,7 @@ Editors: Micael Malta
 
 **Date:** 2026-04-30
 **Status:** Experimental
-**Editors:** NXS Contributors
+**Editors:** Micael Malta
 **MIME Types:** `application/nxb` (binary), `application/nxs` (text source)
 **File Extensions:** `.nxb`, `.nxs`
 
