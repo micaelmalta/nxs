@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 mod compiler;
 mod decoder;
 /// Generates matching .nxb and .json fixtures for the JS benchmark.

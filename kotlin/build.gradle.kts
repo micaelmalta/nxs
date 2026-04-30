@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "2.1.20"
+    kotlin("jvm") version "2.2.0"
     application
     `maven-publish`
     signing
@@ -27,12 +27,12 @@ tasks.register<JavaExec>("bench") {
 }
 
 kotlin {
-    jvmToolchain(25)
+    jvmToolchain(21)
 }
 
 // No Java sources in this project — suppress the toolchain consistency check.
 tasks.withType<JavaCompile> {
-    options.release.set(23)
+    options.release.set(21)
 }
 
 // ── Maven publish ─────────────────────────────────────────────────────────────

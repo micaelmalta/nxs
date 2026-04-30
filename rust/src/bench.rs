@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 mod compiler;
 mod decoder;
 /// NXS vs JSON vs XML vs CSV benchmark

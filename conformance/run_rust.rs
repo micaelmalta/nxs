@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Rust conformance runner for NXS.
 //!
 //! Usage: conformance_runner <conformance_dir>

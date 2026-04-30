@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! gen_conformance — generates all NXS conformance test vectors.
 //!
 //! Usage:  cargo run --release --bin gen_conformance -- <output_dir>
