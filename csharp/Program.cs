@@ -1,11 +1,20 @@
-// NXS C# reader smoke tests + optional bench
+// NXS C# reader smoke tests + optional bench + conformance runner
 // Run: dotnet run -- <fixtures_dir>
 //      dotnet run -- <fixtures_dir> --bench
+//      dotnet run -- --conformance <conformance_dir>
 using System;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Nxs;
+using Nxs.Conformance;
+
+// Conformance mode
+if (args.Length > 0 && args[0] == "--conformance")
+{
+    string confDir = args.Length > 1 ? args[1] : "../conformance";
+    return ConformanceRunner.Run(new[] { confDir });
+}
 
 string dir = args.Length > 0 ? args[0] : "../js/fixtures";
 string nxbPath  = Path.Combine(dir, "records_1000.nxb");

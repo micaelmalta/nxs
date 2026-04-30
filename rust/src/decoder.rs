@@ -211,9 +211,9 @@ fn decode_value_at(data: &[u8], offset: usize, sigil: u8, keys: &[String], sigil
     if offset + 4 <= data.len() {
         let maybe_magic = u32::from_le_bytes(data[offset..offset+4].try_into().map_err(|_| NxsError::OutOfBounds)?);
         if maybe_magic == MAGIC_OBJ {
-            // Recursively decode nested object
-            let nested = decode_object(data, offset, keys, sigils)?;
-            return Ok(DecodedValue::Object(nested));
+            // Nested objects in the compiler path use a locally-scoped key schema,
+            // not the global one. Return Raw to avoid crashing with the wrong schema.
+            return Ok(DecodedValue::Raw(data[offset..offset+8.min(data.len()-offset)].to_vec()));
         }
         if maybe_magic == MAGIC_LIST {
             return decode_list(data, offset);
@@ -243,7 +243,15 @@ fn decode_value_at(data: &[u8], offset: usize, sigil: u8, keys: &[String], sigil
         SIGIL_STR => {
             if offset + 4 > data.len() { return Err(NxsError::OutOfBounds); }
             let len = u32::from_le_bytes(data[offset..offset+4].try_into().map_err(|_| NxsError::OutOfBounds)?) as usize;
-            if offset + 4 + len > data.len() { return Err(NxsError::OutOfBounds); }
+            // Guard against garbage lengths (compiler uses SIGIL_STR generically)
+            if len > 1024 * 1024 || offset + 4 + len > data.len() {
+                // Treat as raw i64 — the field is not a string despite the sigil
+                if offset + 8 <= data.len() {
+                    let v = i64::from_le_bytes(data[offset..offset+8].try_into().map_err(|_| NxsError::OutOfBounds)?);
+                    return Ok(DecodedValue::Int(v));
+                }
+                return Ok(DecodedValue::Raw(data[offset..].to_vec()));
+            }
             let s = String::from_utf8_lossy(&data[offset+4..offset+4+len]).to_string();
             Ok(DecodedValue::Str(s))
         }
@@ -258,25 +266,8 @@ fn decode_value_at(data: &[u8], offset: usize, sigil: u8, keys: &[String], sigil
             if offset + 4 + len > data.len() { return Err(NxsError::OutOfBounds); }
             Ok(DecodedValue::Binary(data[offset+4..offset+4+len].to_vec()))
         }
-        SIGIL_STR | _ => {
-            // The compiler uses SIGIL_STR generically for all keys in the TypeManifest.
-            // We need to use heuristics to distinguish the actual value type.
-            //
-            // Heuristic: if the first 4 bytes could be a valid string length
-            // (small non-zero value) AND followed by printable bytes → string.
-            // Otherwise fall back to i64.
-            if offset + 4 <= data.len() {
-                let maybe_len = u32::from_le_bytes(data[offset..offset+4].try_into().map_err(|_| NxsError::OutOfBounds)?) as usize;
-                // Reasonable string length: fits in the remaining data
-                if maybe_len < 65536 && offset + 4 + maybe_len <= data.len() {
-                    // Check that if the sigil is explicitly SIGIL_STR, decode as string
-                    if sigil == SIGIL_STR {
-                        let s = String::from_utf8_lossy(&data[offset+4..offset+4+maybe_len]).to_string();
-                        return Ok(DecodedValue::Str(s));
-                    }
-                }
-            }
-            // Default: raw i64
+        _ => {
+            // Unknown sigil — return raw i64 as best-effort
             if offset + 8 <= data.len() {
                 let v = i64::from_le_bytes(data[offset..offset+8].try_into().map_err(|_| NxsError::OutOfBounds)?);
                 Ok(DecodedValue::Int(v))

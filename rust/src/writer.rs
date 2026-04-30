@@ -33,15 +33,18 @@ pub struct Schema {
     keys: Vec<String>,
     /// Precomputed LEB128 bitmask size (one per possible present-bit count)
     bitmask_bytes: usize,
+    /// Per-slot sigil (default = SIGIL_STR; updated by NxsWriter on first write)
+    sigils: Vec<u8>,
 }
 
 impl Schema {
     pub fn new(keys: &[&str]) -> Self {
         let keys: Vec<String> = keys.iter().map(|s| s.to_string()).collect();
+        let n = keys.len();
         // LEB128 bitmask size for `keys.len()` bits
-        let bitmask_bytes = (keys.len() + 6) / 7;
+        let bitmask_bytes = (n + 6) / 7;
         let bitmask_bytes = bitmask_bytes.max(1);
-        Schema { keys, bitmask_bytes }
+        Schema { keys, bitmask_bytes, sigils: vec![0u8; n] }
     }
 
     pub fn len(&self) -> usize { self.keys.len() }
@@ -70,25 +73,31 @@ pub struct NxsWriter<'a> {
     frames: Vec<Frame>,
     /// Byte offset (in `buf`, relative to data sector start) of each top-level object.
     record_offsets: Vec<u32>,
+    /// Actual sigil used per slot (set on first write to a slot)
+    slot_sigils: Vec<u8>,
 }
 
 impl<'a> NxsWriter<'a> {
     pub fn new(schema: &'a Schema) -> Self {
+        let n = schema.keys.len();
         NxsWriter {
             schema,
             buf: Vec::with_capacity(4096),
             frames: Vec::with_capacity(4),
             record_offsets: Vec::new(),
+            slot_sigils: vec![0u8; n], // 0 = "not yet set"
         }
     }
 
     /// Pre-allocate a capacity hint (bytes).
     pub fn with_capacity(schema: &'a Schema, cap: usize) -> Self {
+        let n = schema.keys.len();
         NxsWriter {
             schema,
             buf: Vec::with_capacity(cap),
             frames: Vec::with_capacity(4),
             record_offsets: Vec::with_capacity(1024),
+            slot_sigils: vec![0u8; n], // 0 = "not yet set"
         }
     }
 
@@ -183,7 +192,7 @@ impl<'a> NxsWriter<'a> {
     pub fn finish(self) -> Vec<u8> {
         debug_assert!(self.frames.is_empty(), "unclosed objects");
 
-        let schema_bytes = build_schema(&self.schema.keys);
+        let schema_bytes = build_schema(&self.schema.keys, &self.slot_sigils);
         let dict_hash = murmur3_64(&schema_bytes);
 
         let data_sector = self.buf;
@@ -213,6 +222,19 @@ impl<'a> NxsWriter<'a> {
     // ── Typed write methods ──────────────────────────────────────────────────
 
     #[inline(always)]
+    fn mark_slot_sigil(&mut self, slot: Slot, sigil: u8) {
+        let idx = slot.0 as usize;
+        if idx < self.slot_sigils.len() {
+            let cur = self.slot_sigils[idx];
+            // Priority: real typed sigils win over 0 (unset) or '^' (null).
+            // Once a non-null, non-zero sigil is set, don't overwrite.
+            if cur == 0 || (cur == b'^' && sigil != b'^') {
+                self.slot_sigils[idx] = sigil;
+            }
+        }
+    }
+
+    #[inline(always)]
     fn mark_slot(&mut self, slot: Slot) {
         let frame = self.frames.last_mut().expect("no active object");
         let slot_idx = slot.0 as usize;
@@ -237,18 +259,21 @@ impl<'a> NxsWriter<'a> {
 
     #[inline]
     pub fn write_i64(&mut self, slot: Slot, v: i64) {
+        self.mark_slot_sigil(slot, b'=');
         self.mark_slot(slot);
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
 
     #[inline]
     pub fn write_f64(&mut self, slot: Slot, v: f64) {
+        self.mark_slot_sigil(slot, b'~');
         self.mark_slot(slot);
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
 
     #[inline]
     pub fn write_bool(&mut self, slot: Slot, v: bool) {
+        self.mark_slot_sigil(slot, b'?');
         self.mark_slot(slot);
         self.buf.push(if v { 0x01 } else { 0x00 });
         self.buf.extend_from_slice(&[0u8; 7]);
@@ -256,12 +281,14 @@ impl<'a> NxsWriter<'a> {
 
     #[inline]
     pub fn write_time(&mut self, slot: Slot, unix_ns: i64) {
+        self.mark_slot_sigil(slot, b'@');
         self.mark_slot(slot);
         self.buf.extend_from_slice(&unix_ns.to_le_bytes());
     }
 
     #[inline]
     pub fn write_null(&mut self, slot: Slot) {
+        self.mark_slot_sigil(slot, b'^');
         self.mark_slot(slot);
         self.buf.push(0x00);
         // pad to 8
@@ -270,6 +297,7 @@ impl<'a> NxsWriter<'a> {
 
     #[inline]
     pub fn write_str(&mut self, slot: Slot, v: &str) {
+        self.mark_slot_sigil(slot, b'"');
         self.mark_slot(slot);
         let bytes = v.as_bytes();
         self.buf.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
@@ -281,6 +309,7 @@ impl<'a> NxsWriter<'a> {
 
     #[inline]
     pub fn write_bytes(&mut self, slot: Slot, data: &[u8]) {
+        self.mark_slot_sigil(slot, b'<');
         self.mark_slot(slot);
         self.buf.extend_from_slice(&(data.len() as u32).to_le_bytes());
         self.buf.extend_from_slice(data);
@@ -289,6 +318,7 @@ impl<'a> NxsWriter<'a> {
     }
 
     pub fn write_list_i64(&mut self, slot: Slot, values: &[i64]) {
+        self.mark_slot_sigil(slot, b'L');
         self.mark_slot(slot);
         let total = 16 + values.len() * 8;
         self.buf.extend_from_slice(&MAGIC_LIST.to_le_bytes());
@@ -302,6 +332,7 @@ impl<'a> NxsWriter<'a> {
     }
 
     pub fn write_list_f64(&mut self, slot: Slot, values: &[f64]) {
+        self.mark_slot_sigil(slot, b'L');
         self.mark_slot(slot);
         let total = 16 + values.len() * 8;
         self.buf.extend_from_slice(&MAGIC_LIST.to_le_bytes());
@@ -317,10 +348,14 @@ impl<'a> NxsWriter<'a> {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn build_schema(keys: &[String]) -> Vec<u8> {
+fn build_schema(keys: &[String], sigils: &[u8]) -> Vec<u8> {
     let mut b = Vec::new();
     b.extend_from_slice(&(keys.len() as u16).to_le_bytes());
-    for _ in keys { b.push(b'"'); }
+    for (i, _) in keys.iter().enumerate() {
+        let s = sigils.get(i).copied().unwrap_or(0);
+        // 0 means "not yet observed" — use default SIGIL_STR
+        b.push(if s == 0 { b'"' } else { s });
+    }
     for key in keys {
         b.extend_from_slice(key.as_bytes());
         b.push(0x00);
