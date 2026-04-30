@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NXS vs JSON vs CSV — Browser Benchmark</title>
+<style>
+  /* ── shared nav ── */
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 24px;
+    height: 44px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .site-nav .home {
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .site-nav .sep { color: var(--border); margin: 0 2px; }
+  .site-nav a {
+    color: var(--muted);
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .site-nav a:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+  .site-nav a[aria-current="page"] {
+    color: var(--text);
+    background: rgba(122,162,247,0.12);
+    font-weight: 500;
+  }
+  :root {
+    --bg: #0f1115;
+    --panel: #181b23;
+    --panel-2: #1f2330;
+    --text: #e7ebf2;
+    --muted: #8b95a8;
+    --accent: #7aa2f7;
+    --good: #9ece6a;
+    --warn: #e0af68;
+    --bad: #f7768e;
+    --border: #2a2f3c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+  }
+  h1 {
+    font-size: 28px; font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--muted);
+    margin: 0 0 32px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    align-items: center;
+    padding: 16px 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 24px;
+  }
+  .controls label { color: var(--muted); }
+  select, button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #0b0e14; border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  select:focus, button:focus { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+  .sizes {
+    display: flex; gap: 6px;
+  }
+  .sizes button {
+    font-variant-numeric: tabular-nums;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+  .sizes button.active { background: var(--accent); color: #0b0e14; border-color: var(--accent); }
+
+  .status {
+    font-size: 13px; color: var(--muted);
+    min-height: 18px;
+  }
+  .status.running { color: var(--warn); }
+  .status.done { color: var(--good); }
+  .status.error { color: var(--bad); }
+
+  section.card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+  }
+  section.card h2 {
+    margin: 0 0 2px;
+    font-size: 16px; font-weight: 600;
+  }
+  section.card .desc {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 16px;
+  }
+
+  .chart {
+    display: grid;
+    grid-template-columns: 120px 1fr 120px;
+    gap: 6px 12px;
+    align-items: center;
+  }
+  .chart .label {
+    color: var(--text);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart .bar-track {
+    height: 22px;
+    background: var(--panel-2);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .chart .bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+  .chart .bar.json { background: #e0af68; }
+  .chart .bar.csv  { background: #bb9af7; }
+  .chart .bar.nxs  { background: #7aa2f7; }
+  .chart .bar.nxs-wasm { background: #9ece6a; }
+  .chart .bar.failed {
+    background: repeating-linear-gradient(
+      45deg, var(--bad), var(--bad) 6px, #7a3540 6px, #7a3540 12px
+    );
+  }
+  .chart .value {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    text-align: right;
+  }
+  .chart .value.failed { color: var(--bad); }
+
+  .sizes-info {
+    display: flex; gap: 18px;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+  .sizes-info .tag {
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--panel-2);
+  }
+
+  footer {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 40px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+</style>
+</head>
+<body>
+<nav class="site-nav">
+  <a class="home" href="index.html">NXS</a>
+  <span class="sep">›</span>
+  <a href="index.html">Home</a>
+  <a href="bench.html" aria-current="page">Benchmark</a>
+  <a href="ticker.html">Ticker</a>
+  <a href="workers.html">Workers</a>
+  <a href="explorer.html">Explorer</a>
+</nav>
+<main>
+  <h1>NXS vs JSON vs CSV — Browser Benchmark</h1>
+  <p class="sub">The same fixtures used in the Node and Go benches, run in your browser over <code>fetch()</code>.</p>
+
+  <div class="controls">
+    <div>
+      <label>Size:</label>
+      <span class="sizes" id="sizes">
+        <button data-n="1000">1,000</button>
+        <button data-n="10000" class="active">10,000</button>
+        <button data-n="100000">100,000</button>
+        <button data-n="1000000">1,000,000</button>
+        <button data-n="10000000" title="~1.5 GB JSON — exceeds V8 string limit">10,000,000</button>
+        <button data-n="14000000" title="~2.1 GB JSON — well past V8 string limit">14,000,000</button>
+      </span>
+    </div>
+    <button class="primary" id="run">Run benchmark</button>
+    <span class="status" id="status">Ready.</span>
+  </div>
+
+  <div class="sizes-info" id="sizes-info"></div>
+
+  <section class="card">
+    <h2>1. Open file — parse the entire structure</h2>
+    <p class="desc">JSON and CSV eagerly parse every byte; NXS reads only the header + tail-index.</p>
+    <div class="chart" id="chart-open"></div>
+  </section>
+
+  <section class="card">
+    <h2>2. Random-access read — one field from record k</h2>
+    <p class="desc">Once data is in memory, read <code>record[k].username</code>. Measures warm property access.</p>
+    <div class="chart" id="chart-random"></div>
+  </section>
+
+  <section class="card">
+    <h2>3. Random-access read — multiple fields from record k</h2>
+    <p class="desc">Read 4 fields per random record (<code>username</code>, <code>age</code>, <code>balance</code>, <code>active</code>). NXS amortises header parsing after the first field.</p>
+    <div class="chart" id="chart-random-multi"></div>
+  </section>
+
+  <section class="card">
+    <h2>4. Cold pipeline — fetch + parse + one field</h2>
+    <p class="desc">The realistic browser scenario: user hits page, data fetched, first field read.</p>
+    <div class="chart" id="chart-cold"></div>
+  </section>
+
+  <section class="card">
+    <h2>5. Aggregate — sum of 'score' across all records</h2>
+    <p class="desc">Uses format-specific optimisations: <code>JSON.parse</code> + loop, raw CSV column scan, NXS bulk reducer (WASM if loaded).</p>
+    <div class="chart" id="chart-reduce"></div>
+  </section>
+
+</main>
+
+<script type="module">
+import { NxsReader } from "./nxs.js";
+import { loadWasm } from "./wasm.js";
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+
+const $ = sel => document.querySelector(sel);
+const fmtBytes = n =>
+  n < 1024        ? `${n} B` :
+  n < 1048576     ? `${(n/1024).toFixed(1)} KB` :
+                    `${(n/1048576).toFixed(2)} MB`;
+const fmtTime = ms =>
+  ms < 0.001      ? `${(ms*1e6).toFixed(0)} ns` :
+  ms < 1          ? `${(ms*1e3).toFixed(1)} µs` :
+  ms < 1000       ? `${ms.toFixed(2)} ms` :
+                    `${(ms/1000).toFixed(2)} s`;
+
+function setStatus(msg, cls = "") {
+  const el = $("#status");
+  el.textContent = msg;
+  el.className = `status ${cls}`;
+}
+
+function bench(iters, fn) {
+  const warmup = Math.max(3, iters / 10 | 0);
+  for (let i = 0; i < warmup; i++) fn();
+  const t0 = performance.now();
+  for (let i = 0; i < iters; i++) fn();
+  return (performance.now() - t0) / iters;
+}
+
+// Draw a horizontal bar chart. `rows` is [{label, ms, klass, failed, failText}].
+// A `failed` row draws a full-width red-striped bar with custom text.
+function drawChart(containerId, rows) {
+  const el = $(containerId);
+  el.innerHTML = "";
+  const timed = rows.filter(r => !r.failed && typeof r.ms === "number");
+  const maxMs = timed.length ? Math.max(...timed.map(r => r.ms)) : 1;
+  for (const r of rows) {
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = r.label;
+
+    const track = document.createElement("div");
+    track.className = "bar-track";
+    const bar = document.createElement("div");
+    if (r.failed) {
+      bar.className = "bar failed";
+      bar.style.width = "100%";
+    } else {
+      bar.className = `bar ${r.klass ?? ""}`;
+      bar.style.width = `${Math.max(1, (r.ms / maxMs) * 100)}%`;
+    }
+    track.appendChild(bar);
+
+    const value = document.createElement("div");
+    if (r.failed) {
+      value.className = "value failed";
+      value.textContent = r.failText || "failed";
+    } else {
+      value.className = "value";
+      value.textContent = fmtTime(r.ms);
+    }
+
+    el.append(label, track, value);
+  }
+}
+
+// ── CSV parser (minimal; matches Node bench) ──────────────────────────────
+
+function parseCsv(str) {
+  const lines = str.split("\n");
+  const headers = lines[0].split(",");
+  const nCols = headers.length;
+  const out = new Array(lines.length - 2);
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.length === 0) continue;
+    const row = {};
+    let start = 0, col = 0;
+    for (let j = 0; j <= line.length && col < nCols; j++) {
+      if (j === line.length || line.charCodeAt(j) === 44) {
+        row[headers[col]] = line.slice(start, j);
+        col++;
+        start = j + 1;
+      }
+    }
+    out[i-1] = row;
+  }
+  return out;
+}
+
+function sumCsvScore(str) {
+  let p = str.indexOf("\n") + 1;
+  let sum = 0;
+  const len = str.length;
+  while (p < len) {
+    let commas = 0, scoreStart = p;
+    while (p < len) {
+      const c = str.charCodeAt(p);
+      if (c === 44) {
+        commas++;
+        if (commas === 6) scoreStart = p + 1;
+        else if (commas === 7) {
+          sum += +str.slice(scoreStart, p);
+          while (p < len && str.charCodeAt(p) !== 10) p++;
+          p++; break;
+        }
+      }
+      p++;
+    }
+  }
+  return sum;
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────
+
+let selectedN = 10000;
+document.querySelectorAll("#sizes button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#sizes button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    selectedN = parseInt(btn.dataset.n, 10);
+  });
+});
+
+// V8/JSC/SpiderMonkey all cap strings at roughly 2^30 characters (~512 MB).
+// `fetch(...).text()` materialises the response as a JS string, so files
+// above this limit cannot be decoded as strings at all — JSON.parse never
+// gets a chance to fail. We detect this up-front and mark the bars as failed.
+const STRING_LIMIT_BYTES = 512 * 1024 * 1024;
+
+// Load WASM once on page load. Memory is grown on demand by NxsWasm when a
+// payload bigger than the initial size is loaded, so we pick a modest default
+// and let growth handle the rest.
+let wasm = null;
+try {
+  wasm = await loadWasm("./wasm/nxs_reducers.wasm", { initialPages: 2200 });
+  setStatus("WASM module loaded.", "done");
+} catch (e) {
+  setStatus(`WASM unavailable (${e.message}) — falling back to pure JS.`, "warn");
+}
+
+// Cache fetched resources per size so rerunning the same N doesn't redownload
+// gigabytes. Values are { nxbBuf, jsonBytes, csvBytes, jsonStr?, csvStr?, err? }.
+const fetchCache = new Map();
+
+// Safely convert an ArrayBuffer of UTF-8 bytes into a JS string. Returns
+// { str } on success or { err } if the result would exceed the engine's
+// string-length cap. The cap cannot be reliably probed, so we rely on both
+// byte-length heuristics and a try/catch around TextDecoder.
+function bytesToStringSafe(bytes) {
+  if (bytes.byteLength > STRING_LIMIT_BYTES) {
+    return { err: `exceeds JS string limit (${fmtBytes(bytes.byteLength)} > 512 MB)` };
+  }
+  try {
+    const str = new TextDecoder("utf-8").decode(bytes);
+    return { str };
+  } catch (e) {
+    return { err: e.message };
+  }
+}
+
+// Fetch each fixture independently. A failure on one does not prevent the
+// others from being used — JSON at 1.5 GB may fail with ERR_CONTENT_LENGTH
+// or string-length errors; NXS should still run.
+async function fetchBytesSafe(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { err: `HTTP ${res.status}` };
+    const ab = await res.arrayBuffer();
+    return { bytes: new Uint8Array(ab) };
+  } catch (e) {
+    return { err: e.message };
+  }
+}
+
+async function loadFixtures(n) {
+  if (fetchCache.has(n)) return fetchCache.get(n);
+
+  setStatus(`Fetching ${n.toLocaleString()} records…`, "running");
+  const [nRes, jRes, cRes] = await Promise.all([
+    fetchBytesSafe(`./fixtures/records_${n}.nxb`),
+    fetchBytesSafe(`./fixtures/records_${n}.json`),
+    fetchBytesSafe(`./fixtures/records_${n}.csv`),
+  ]);
+
+  if (nRes.err) throw new Error(`NXS fetch failed: ${nRes.err}`);
+  const nxbBuf = nRes.bytes;
+  const jsonBytes = jRes.bytes;
+  const csvBytes  = cRes.bytes;
+
+  // Try to decode JSON/CSV as strings — may throw if over the engine's cap.
+  const jsonDec = jsonBytes ? bytesToStringSafe(jsonBytes) : { err: `fetch: ${jRes.err}` };
+  const csvDec  = csvBytes  ? bytesToStringSafe(csvBytes)  : { err: `fetch: ${cRes.err}` };
+
+  const entry = {
+    nxbBuf,
+    jsonBytes,
+    csvBytes,
+    jsonStr: jsonDec.str,
+    csvStr:  csvDec.str,
+    jsonErr: jsonDec.err,
+    csvErr:  csvDec.err,
+  };
+  fetchCache.set(n, entry);
+  return entry;
+}
+
+// Helper: run a scenario with a failure guard. If `failed` is true, emit a
+// failed row directly; otherwise invoke `run()` which returns ms.
+function scenario(label, klass, failed, failText, run) {
+  if (failed) return { label, klass, failed: true, failText };
+  return { label, klass, ms: run() };
+}
+
+$("#run").addEventListener("click", async () => {
+  const n = selectedN;
+  $("#run").disabled = true;
+
+  try {
+    const {
+      nxbBuf, jsonBytes, csvBytes,
+      jsonStr, csvStr, jsonErr, csvErr,
+    } = await loadFixtures(n);
+
+    // Size info
+    const jsonLen = jsonBytes?.length ?? 0;
+    const csvLen  = csvBytes?.length ?? 0;
+    const nxbPct = jsonLen ? (nxbBuf.length / jsonLen * 100).toFixed(0) : "?";
+    const csvPct = jsonLen ? (csvLen / jsonLen * 100).toFixed(0) : "?";
+    $("#sizes-info").innerHTML = `
+      <span class="tag">.nxb ${fmtBytes(nxbBuf.length)} (${nxbPct}% of JSON)</span>
+      <span class="tag">.json ${jsonBytes ? fmtBytes(jsonLen) : `fetch failed: ${jsonErr}`}</span>
+      <span class="tag">.csv ${csvBytes ? fmtBytes(csvLen) : `fetch failed: ${csvErr}`} ${csvBytes ? `(${csvPct}% of JSON)` : ""}</span>
+    `;
+
+    // Iteration counts scaled to each op's cost
+    const iters = {
+      parse: n >= 1e7 ? 3 : n >= 1e6 ? 5  : n >= 1e5 ? 20  : 200,
+      random: n >= 1e7 ? 20000 : n >= 1e6 ? 50000 : 100000,
+      cold:  n >= 1e7 ? 2 : n >= 1e6 ? 3  : n >= 1e5 ? 20  : 200,
+      scan:  n >= 1e7 ? 2 : n >= 1e6 ? 3  : n >= 1e5 ? 20  : 500,
+    };
+
+    setStatus(`Running (n=${n.toLocaleString()})…`, "running");
+    await new Promise(r => setTimeout(r, 20)); // let the status paint
+
+    // NXS is always usable regardless of JSON/CSV string-length failures.
+    const reader = new NxsReader(nxbBuf);
+    let wasmReader = null;
+    if (wasm) {
+      wasmReader = new NxsReader(nxbBuf);
+      wasmReader.useWasm(wasm);
+    }
+
+    // Pre-parse what we can. JSON/CSV may be unavailable for giant fixtures.
+    let parsedJson, parsedCsv, jsonParseErr, csvParseErr;
+    if (jsonStr !== undefined) {
+      try { parsedJson = JSON.parse(jsonStr); }
+      catch (e) { jsonParseErr = e.message; }
+    }
+    if (csvStr !== undefined) {
+      try { parsedCsv = parseCsv(csvStr); }
+      catch (e) { csvParseErr = e.message; }
+    }
+
+    const jsonFailText = jsonErr ? jsonErr : jsonParseErr ? `JSON.parse: ${jsonParseErr}` : null;
+    const csvFailText  = csvErr  ? csvErr  : csvParseErr  ? `parseCsv: ${csvParseErr}`    : null;
+
+    // Precompute indices & slots used by multiple scenarios
+    const idxs = new Array(iters.random);
+    for (let i = 0; i < iters.random; i++) idxs[i] = Math.floor(Math.random() * n);
+    const uSlot = reader.slot("username");
+    const sUser = uSlot;
+    const sAge  = reader.slot("age");
+    const sBal  = reader.slot("balance");
+    const sAct  = reader.slot("active");
+    let ii;
+
+    // ── 1. Open ────────────────────────────────────────────────────────
+    drawChart("#chart-open", [
+      scenario("JSON.parse",    "json", !!jsonFailText, jsonFailText, () => bench(iters.parse, () => JSON.parse(jsonStr))),
+      scenario("parseCsv",      "csv",  !!csvFailText,  csvFailText,  () => bench(iters.parse, () => parseCsv(csvStr))),
+      scenario("new NxsReader", "nxs",  false,          null,         () => bench(iters.parse, () => new NxsReader(nxbBuf))),
+    ]);
+
+    // ── 2. Random access ───────────────────────────────────────────────
+    drawChart("#chart-random", [
+      scenario("JSON arr[k].username", "json", !parsedJson, jsonFailText, () => {
+        ii = 0; return bench(iters.random, () => parsedJson[idxs[ii++ % iters.random]].username);
+      }),
+      scenario("CSV arr[k].username", "csv", !parsedCsv, csvFailText, () => {
+        ii = 0; return bench(iters.random, () => parsedCsv[idxs[ii++ % iters.random]].username);
+      }),
+      scenario("NXS getStrBySlot", "nxs", false, null, () => {
+        ii = 0; return bench(iters.random, () => reader.record(idxs[ii++ % iters.random]).getStrBySlot(uSlot));
+      }),
+    ]);
+
+    // ── 3. Random access, multiple fields ─────────────────────────────
+    drawChart("#chart-random-multi", [
+      scenario("JSON 4-field read", "json", !parsedJson, jsonFailText, () => {
+        ii = 0;
+        return bench(iters.random, () => {
+          const r = parsedJson[idxs[ii++ % iters.random]];
+          return r.username.length + r.age + r.balance + (r.active ? 1 : 0);
+        });
+      }),
+      scenario("CSV 4-field read", "csv", !parsedCsv, csvFailText, () => {
+        ii = 0;
+        return bench(iters.random, () => {
+          const r = parsedCsv[idxs[ii++ % iters.random]];
+          return r.username.length + +r.age + +r.balance + (r.active === "true" ? 1 : 0);
+        });
+      }),
+      scenario("NXS 4-field read", "nxs", false, null, () => {
+        ii = 0;
+        return bench(iters.random, () => {
+          const obj = reader.record(idxs[ii++ % iters.random]);
+          return obj.getStrBySlot(sUser).length
+               + obj.getI64BySlot(sAge)
+               + obj.getF64BySlot(sBal)
+               + (obj.getBoolBySlot(sAct) ? 1 : 0);
+        });
+      }),
+    ]);
+
+    // ── 4. Cold pipeline ───────────────────────────────────────────────
+    const k = Math.floor(n / 2);
+    drawChart("#chart-cold", [
+      scenario("JSON parse + arr[k]", "json", !!jsonFailText, jsonFailText, () =>
+        bench(iters.cold, () => JSON.parse(jsonStr)[k].username)),
+      scenario("CSV parse + arr[k]", "csv", !!csvFailText, csvFailText, () =>
+        bench(iters.cold, () => parseCsv(csvStr)[k].username)),
+      scenario("NXS open + record(k)", "nxs", false, null, () =>
+        bench(iters.cold, () => new NxsReader(nxbBuf).record(k).getStrBySlot(uSlot))),
+    ]);
+
+    // ── 5. Aggregate ───────────────────────────────────────────────────
+    const reduceRows = [
+      scenario("JSON: pre-parsed + loop", "json", !parsedJson, jsonFailText, () =>
+        bench(iters.scan, () => { let s = 0; for (const r of parsedJson) s += r.score; })),
+      scenario("CSV: sumCsvScore (raw)", "csv", !csvStr, csvFailText, () =>
+        bench(iters.scan, () => sumCsvScore(csvStr))),
+      scenario("NXS sumF64 (pure JS)", "nxs", false, null, () =>
+        bench(iters.scan, () => reader.sumF64("score"))),
+    ];
+    if (wasmReader) {
+      reduceRows.push(scenario("NXS sumF64 (WASM)", "nxs-wasm", false, null, () =>
+        bench(iters.scan, () => wasmReader.sumF64("score"))));
+    }
+    drawChart("#chart-reduce", reduceRows);
+
+    setStatus(`Done. n=${n.toLocaleString()} — scroll for results.`, "done");
+  } catch (e) {
+    setStatus(`Error: ${e.message}`, "error");
+    console.error(e);
+  } finally {
+    $("#run").disabled = false;
+  }
+});
+
+// Run once automatically on page load so the user sees something immediately.
+$("#run").click();
+</script>
+</body>
+</html>

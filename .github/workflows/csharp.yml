@@ -1,0 +1,31 @@
+name: C#
+
+on:
+  push:
+    paths: ['csharp/**', '.github/workflows/csharp.yml', '.github/workflows/fixtures.yml']
+  pull_request:
+    paths: ['csharp/**', '.github/workflows/csharp.yml', '.github/workflows/fixtures.yml']
+
+jobs:
+  fixtures:
+    uses: ./.github/workflows/fixtures.yml
+
+  test:
+    needs: fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0'
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Test
+        working-directory: csharp
+        run: dotnet run -p:NxsTargetFramework=net9.0 -- ../js/fixtures

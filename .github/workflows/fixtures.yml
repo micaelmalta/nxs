@@ -1,0 +1,37 @@
+name: Generate fixtures
+
+on:
+  workflow_call:
+    outputs:
+      cache-key:
+        value: ${{ jobs.generate.outputs.cache-key }}
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: fixtures-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
+
+      - name: Generate test fixtures (1000 records)
+        working-directory: rust
+        run: cargo run --release --bin gen_fixtures -- ../js/fixtures 1000
+
+      - name: Upload fixtures
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+          retention-days: 1

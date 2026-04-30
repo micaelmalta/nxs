@@ -1,0 +1,14 @@
+{
+  "name": "nxs-js",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "JavaScript reader for the Nexus Standard (NXS) binary format",
+  "main": "nxs.js",
+  "exports": {
+    ".": "./nxs.js"
+  },
+  "scripts": {
+    "bench": "node bench.js ./fixtures",
+    "test": "node test.js"
+  }
+}

@@ -1,0 +1,32 @@
+name: Go
+
+on:
+  push:
+    paths: ['go/**', '.github/workflows/go.yml', '.github/workflows/fixtures.yml']
+  pull_request:
+    paths: ['go/**', '.github/workflows/go.yml', '.github/workflows/fixtures.yml']
+
+jobs:
+  fixtures:
+    uses: ./.github/workflows/fixtures.yml
+
+  test:
+    needs: fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: go/go.sum
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Test
+        working-directory: go
+        run: go test ./...

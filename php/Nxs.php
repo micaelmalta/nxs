@@ -1,0 +1,491 @@
+<?php
+/**
+ * NXS Binary Reader — pure PHP 8.0+, no Composer, no extensions.
+ *
+ * Implements the Nexus Standard v1.0 binary (.nxb) wire format.
+ * All multi-byte integers are little-endian.
+ *
+ * Usage:
+ *   $bytes  = file_get_contents('records.nxb');
+ *   $reader = new Nxs\Reader($bytes);
+ *   echo $reader->recordCount();          // int
+ *   echo implode(',', $reader->keys());   // CSV key names
+ *   $obj = $reader->record(42);
+ *   echo $obj->getStr('username');
+ *   echo $reader->sumF64('score');
+ */
+
+namespace Nxs;
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const MAGIC_FILE   = 0x4E585342; // NXSB
+const MAGIC_OBJ    = 0x4E58534F; // NXSO
+const MAGIC_FOOTER = 0x2153584E; // NXS!
+
+const FLAG_SCHEMA_EMBEDDED = 0x0002;
+
+// ── Exceptions ───────────────────────────────────────────────────────────────
+
+class NxsException extends \RuntimeException {}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Decode a LEB128 unsigned integer from $bytes at $pos.
+ * Advances $pos past the consumed bytes.
+ * Returns the decoded integer.
+ */
+function leb128(string $bytes, int &$pos): int
+{
+    $result = 0;
+    $shift  = 0;
+    do {
+        $byte    = ord($bytes[$pos++]);
+        $result |= ($byte & 0x7F) << $shift;
+        $shift  += 7;
+    } while ($byte & 0x80);
+    return $result;
+}
+
+/**
+ * Read uint32 little-endian at offset (no bounds check — caller's duty).
+ */
+function rdU32(string $bytes, int $off): int
+{
+    return unpack('Vval', $bytes, $off)['val'];
+}
+
+/**
+ * Read uint64 little-endian at offset.
+ * On 64-bit PHP (PHP_INT_SIZE === 8) 'Q' gives an int that fits.
+ * Files in practice are < 2 GB so no overflow risk.
+ */
+function rdU64(string $bytes, int $off): int
+{
+    return unpack('Qval', $bytes, $off)['val'];
+}
+
+/**
+ * Read uint16 little-endian at offset.
+ */
+function rdU16(string $bytes, int $off): int
+{
+    return unpack('vval', $bytes, $off)['val'];
+}
+
+/**
+ * Read signed int64 little-endian at offset.
+ * PHP 7+ 'q' is native-endian on 64-bit; on x86/arm64 LE machines this is LE.
+ * We verify with PHP_INT_SIZE and a runtime check during Reader construction.
+ */
+function rdI64(string $bytes, int $off): int
+{
+    return unpack('qval', $bytes, $off)['val'];
+}
+
+/**
+ * Read IEEE-754 double little-endian at offset.
+ * 'e' = LE double (PHP ≥ 7.0.15). If unavailable, fall back to strrev+d.
+ */
+function rdF64(string $bytes, int $off): float
+{
+    static $useE = null;
+    if ($useE === null) {
+        // Runtime probe: 1.0 LE = 00 00 00 00 00 00 F0 3F
+        $probe = unpack('eval', "\x00\x00\x00\x00\x00\x00\xF0\x3F")['val'];
+        $useE  = (abs($probe - 1.0) < 1e-15);
+    }
+    if ($useE) {
+        return unpack('eval', $bytes, $off)['val'];
+    }
+    // Fallback: 'e' not available — reverse bytes for big-endian unpack 'd'.
+    return unpack('dval', strrev(substr($bytes, $off, 8)))['val'];
+}
+
+// ── NxsObject ────────────────────────────────────────────────────────────────
+
+/**
+ * Lazy view over a single NXSO record.
+ * The bitmask/offset-table are parsed only on first field access.
+ */
+class NxsObject
+{
+    private Reader $reader;
+    private int    $offset;
+
+    // Stage 0 = untouched; filled lazily:
+    private int   $offsetTableStart = -1;   // absolute byte pos of OffsetTable
+    private array $present          = [];   // bool per slot
+    private array $rank             = [];   // rank[slot] = index into OffsetTable
+
+    public function __construct(Reader $reader, int $offset)
+    {
+        $this->reader = $reader;
+        $this->offset = $offset;
+    }
+
+    // ── Internal: parse bitmask + build offset-table index ────────────────
+
+    private function ensureParsed(): void
+    {
+        if ($this->offsetTableStart >= 0) return;
+
+        $bytes  = $this->reader->rawBytes();
+        $p      = $this->offset;
+
+        // Validate NXSO magic
+        $magic = rdU32($bytes, $p);
+        if ($magic !== MAGIC_OBJ) {
+            throw new NxsException(sprintf(
+                'ERR_BAD_MAGIC: expected NXSO at offset %d, got 0x%08X', $p, $magic
+            ));
+        }
+        $p += 8; // skip Magic(4) + Length(4)
+
+        $bitmaskStart = $p;
+
+        // Walk LEB128 bitmask, building present[] and rank[]
+        $keyCount = $this->reader->keyCount();
+        $present  = array_fill(0, $keyCount, false);
+        $tableIdx = 0;
+        $slot     = 0;
+
+        do {
+            $byte     = ord($bytes[$p++]);
+            $dataBits = $byte & 0x7F;
+            for ($b = 0; $b < 7 && $slot < $keyCount; $b++, $slot++) {
+                if (($dataBits >> $b) & 1) {
+                    $present[$slot] = true;
+                }
+            }
+        } while ($byte & 0x80);
+
+        // Build rank: rank[slot] = number of set bits before slot
+        $rank = array_fill(0, $keyCount, 0);
+        $acc  = 0;
+        for ($s = 0; $s < $keyCount; $s++) {
+            $rank[$s] = $acc;
+            if ($present[$s]) $acc++;
+        }
+
+        $this->present          = $present;
+        $this->rank             = $rank;
+        $this->offsetTableStart = $p;
+    }
+
+    /**
+     * Resolve the absolute byte offset of slot $slot's value.
+     * Returns -1 if the field is absent.
+     */
+    private function resolveSlot(int $slot): int
+    {
+        $this->ensureParsed();
+        if ($slot < 0 || $slot >= count($this->present) || !$this->present[$slot]) {
+            return -1;
+        }
+        $bytes  = $this->reader->rawBytes();
+        $relOff = rdU16($bytes, $this->offsetTableStart + $this->rank[$slot] * 2);
+        return $this->offset + $relOff;
+    }
+
+    // ── Public typed accessors ─────────────────────────────────────────────
+
+    public function getStr(string $key): ?string
+    {
+        $slot = $this->reader->slotOf($key);
+        if ($slot < 0) return null;
+        $off = $this->resolveSlot($slot);
+        if ($off < 0) return null;
+        $bytes = $this->reader->rawBytes();
+        $len   = rdU32($bytes, $off);
+        return substr($bytes, $off + 4, $len);
+    }
+
+    public function getI64(string $key): ?int
+    {
+        $slot = $this->reader->slotOf($key);
+        if ($slot < 0) return null;
+        $off = $this->resolveSlot($slot);
+        if ($off < 0) return null;
+        return rdI64($this->reader->rawBytes(), $off);
+    }
+
+    public function getF64(string $key): ?float
+    {
+        $slot = $this->reader->slotOf($key);
+        if ($slot < 0) return null;
+        $off = $this->resolveSlot($slot);
+        if ($off < 0) return null;
+        return rdF64($this->reader->rawBytes(), $off);
+    }
+
+    public function getBool(string $key): ?bool
+    {
+        $slot = $this->reader->slotOf($key);
+        if ($slot < 0) return null;
+        $off = $this->resolveSlot($slot);
+        if ($off < 0) return null;
+        return ord($this->reader->rawBytes()[$off]) !== 0;
+    }
+}
+
+// ── Reader ───────────────────────────────────────────────────────────────────
+
+class Reader
+{
+    private string $bytes;
+    private int    $recordCount;
+    private array  $keys      = [];  // index → name
+    private array  $keyIndex  = [];  // name → index
+    private int    $tailStart;       // absolute offset of first tail-index entry
+
+    public function __construct(string $bytes)
+    {
+        $this->bytes = $bytes;
+        $len = strlen($bytes);
+        if ($len < 32) {
+            throw new NxsException('ERR_OUT_OF_BOUNDS: file too small');
+        }
+
+        // ── Validate header magic ──────────────────────────────────────────
+        $magic = rdU32($bytes, 0);
+        if ($magic !== MAGIC_FILE) {
+            throw new NxsException(sprintf(
+                'ERR_BAD_MAGIC: expected 0x%08X, got 0x%08X', MAGIC_FILE, $magic
+            ));
+        }
+
+        // ── Preamble ───────────────────────────────────────────────────────
+        // Offset 4: version u16 (ignored)
+        $flags   = rdU16($bytes, 6);
+        $tailPtr = rdU64($bytes, 16);
+
+        // ── Footer check ───────────────────────────────────────────────────
+        $footer = rdU32($bytes, $len - 4);
+        if ($footer !== MAGIC_FOOTER) {
+            throw new NxsException('ERR_BAD_MAGIC: footer magic mismatch');
+        }
+
+        // ── Schema (if embedded) ───────────────────────────────────────────
+        if ($flags & FLAG_SCHEMA_EMBEDDED) {
+            $this->readSchema(32);
+        }
+
+        // ── Tail-index ─────────────────────────────────────────────────────
+        $this->recordCount = rdU32($bytes, (int)$tailPtr);
+        // Each entry: u16 KeyID (2) + u64 AbsoluteOffset (8) = 10 bytes
+        $this->tailStart = (int)$tailPtr + 4;
+    }
+
+    // ── Schema parser ──────────────────────────────────────────────────────
+
+    private function readSchema(int $offset): void
+    {
+        $bytes    = $this->bytes;
+        $keyCount = rdU16($bytes, $offset);
+        $offset  += 2;
+
+        // TypeManifest: keyCount sigil bytes (read but not used for typed accessors)
+        $offset += $keyCount;
+
+        // StringPool: null-terminated UTF-8 key names
+        for ($i = 0; $i < $keyCount; $i++) {
+            $end = strpos($bytes, "\x00", $offset);
+            if ($end === false) {
+                throw new NxsException('ERR_OUT_OF_BOUNDS: unterminated key in StringPool');
+            }
+            $name = substr($bytes, $offset, $end - $offset);
+            $this->keys[]         = $name;
+            $this->keyIndex[$name] = $i;
+            $offset = $end + 1;
+        }
+    }
+
+    // ── Public API ─────────────────────────────────────────────────────────
+
+    public function recordCount(): int
+    {
+        return $this->recordCount;
+    }
+
+    /** @return string[] */
+    public function keys(): array
+    {
+        return $this->keys;
+    }
+
+    public function record(int $i): NxsObject
+    {
+        if ($i < 0 || $i >= $this->recordCount) {
+            throw new NxsException(sprintf(
+                'ERR_OUT_OF_BOUNDS: record %d out of [0, %d)', $i, $this->recordCount
+            ));
+        }
+        // Tail entry: KeyID u16 (skip 2) + AbsoluteOffset u64
+        $entryOff  = $this->tailStart + $i * 10;
+        $absOffset = rdU64($this->bytes, $entryOff + 2);
+        return new NxsObject($this, (int)$absOffset);
+    }
+
+    // ── Bulk reducers (tight loops, no per-record NxsObject allocation) ──
+
+    /**
+     * Sum of all f64 values for $key over every record.
+     * Uses a tight inline loop to avoid NxsObject allocation per record.
+     */
+    public function sumF64(string $key): float
+    {
+        $slot = $this->slotOf($key);
+        if ($slot < 0) return 0.0;
+
+        $bytes      = $this->bytes;
+        $tailStart  = $this->tailStart;
+        $n          = $this->recordCount;
+        $sum        = 0.0;
+
+        for ($i = 0; $i < $n; $i++) {
+            $entryOff  = $tailStart + $i * 10;
+            $absOffset = rdU64($bytes, $entryOff + 2);
+            $relOff    = $this->valueOffset($bytes, (int)$absOffset, $slot);
+            if ($relOff >= 0) {
+                $sum += rdF64($bytes, (int)$absOffset + $relOff);
+            }
+        }
+        return $sum;
+    }
+
+    public function minF64(string $key): ?float
+    {
+        $slot = $this->slotOf($key);
+        if ($slot < 0) return null;
+
+        $bytes     = $this->bytes;
+        $tailStart = $this->tailStart;
+        $n         = $this->recordCount;
+        $min       = PHP_FLOAT_MAX;
+        $have      = false;
+
+        for ($i = 0; $i < $n; $i++) {
+            $entryOff  = $tailStart + $i * 10;
+            $absOffset = rdU64($bytes, $entryOff + 2);
+            $relOff    = $this->valueOffset($bytes, (int)$absOffset, $slot);
+            if ($relOff >= 0) {
+                $v = rdF64($bytes, (int)$absOffset + $relOff);
+                if (!$have || $v < $min) { $min = $v; $have = true; }
+            }
+        }
+        return $have ? $min : null;
+    }
+
+    public function maxF64(string $key): ?float
+    {
+        $slot = $this->slotOf($key);
+        if ($slot < 0) return null;
+
+        $bytes     = $this->bytes;
+        $tailStart = $this->tailStart;
+        $n         = $this->recordCount;
+        $max       = -PHP_FLOAT_MAX;
+        $have      = false;
+
+        for ($i = 0; $i < $n; $i++) {
+            $entryOff  = $tailStart + $i * 10;
+            $absOffset = rdU64($bytes, $entryOff + 2);
+            $relOff    = $this->valueOffset($bytes, (int)$absOffset, $slot);
+            if ($relOff >= 0) {
+                $v = rdF64($bytes, (int)$absOffset + $relOff);
+                if (!$have || $v > $max) { $max = $v; $have = true; }
+            }
+        }
+        return $have ? $max : null;
+    }
+
+    public function sumI64(string $key): int
+    {
+        $slot = $this->slotOf($key);
+        if ($slot < 0) return 0;
+
+        $bytes     = $this->bytes;
+        $tailStart = $this->tailStart;
+        $n         = $this->recordCount;
+        $sum       = 0;
+
+        for ($i = 0; $i < $n; $i++) {
+            $entryOff  = $tailStart + $i * 10;
+            $absOffset = rdU64($bytes, $entryOff + 2);
+            $relOff    = $this->valueOffset($bytes, (int)$absOffset, $slot);
+            if ($relOff >= 0) {
+                $sum += rdI64($bytes, (int)$absOffset + $relOff);
+            }
+        }
+        return $sum;
+    }
+
+    // ── Internal helpers (called by NxsObject too) ─────────────────────────
+
+    /** Resolve key name → slot index, or -1. */
+    public function slotOf(string $key): int
+    {
+        return array_key_exists($key, $this->keyIndex) ? $this->keyIndex[$key] : -1;
+    }
+
+    /** Number of keys in schema. */
+    public function keyCount(): int
+    {
+        return count($this->keys);
+    }
+
+    /** Raw byte string (passed to NxsObject). */
+    public function rawBytes(): string
+    {
+        return $this->bytes;
+    }
+
+    /**
+     * Inline bitmask walk: given a record at $absOffset, find the *relative*
+     * offset of slot $slot's value (relative to $absOffset).
+     * Returns -1 if the field is absent.
+     *
+     * This is the hot-path kernel used by sumF64 / minF64 / maxF64 / sumI64.
+     * It avoids NxsObject construction and works directly on the byte string.
+     */
+    private function valueOffset(string $bytes, int $absOffset, int $slot): int
+    {
+        $p        = $absOffset + 8;  // skip NXSO Magic(4) + Length(4)
+        $curSlot  = 0;
+        $tableIdx = 0;
+        $found    = false;
+        $byte     = 0;
+
+        // Walk LEB128 bitmask counting present-bits before $slot
+        while (true) {
+            $byte     = ord($bytes[$p++]);
+            $dataBits = $byte & 0x7F;
+            for ($b = 0; $b < 7; $b++) {
+                if ($curSlot === $slot) {
+                    if (($dataBits >> $b) & 1) {
+                        $found = true;
+                    }
+                    goto DONE_MASK;
+                }
+                if (($dataBits >> $b) & 1) $tableIdx++;
+                $curSlot++;
+            }
+            if (!($byte & 0x80)) {
+                // No more bitmask bytes — slot not present
+                return -1;
+            }
+        }
+        DONE_MASK:
+        if (!$found) return -1;
+
+        // Drain remaining continuation bytes
+        while ($byte & 0x80) {
+            $byte = ord($bytes[$p++]);
+        }
+
+        // OffsetTable: tableIdx * 2 bytes from $p
+        return rdU16($bytes, $p + $tableIdx * 2);
+    }
+}

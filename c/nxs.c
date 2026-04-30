@@ -1,0 +1,296 @@
+// NXS Reader implementation (C99)
+#include "nxs.h"
+#include <string.h>
+#include <math.h>
+
+// ── Little-endian helpers (no UB — memcpy) ────────────────────────────────────
+
+static inline uint16_t rd_u16(const uint8_t *p) {
+    uint16_t v; memcpy(&v, p, 2); return v;  /* host is LE on all target archs */
+}
+static inline uint32_t rd_u32(const uint8_t *p) {
+    uint32_t v; memcpy(&v, p, 4); return v;
+}
+static inline uint64_t rd_u64(const uint8_t *p) {
+    uint64_t v; memcpy(&v, p, 8); return v;
+}
+static inline int64_t rd_i64(const uint8_t *p) {
+    int64_t v; memcpy(&v, p, 8); return v;
+}
+static inline double rd_f64(const uint8_t *p) {
+    double v; memcpy(&v, p, 8); return v;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+#define MAGIC_FILE   0x4E585342u
+#define MAGIC_OBJ    0x4E58534Fu
+#define MAGIC_FOOTER 0x2153584Eu
+#define FLAG_SCHEMA  0x0002u
+
+// ── Open / close ──────────────────────────────────────────────────────────────
+
+nxs_err_t nxs_open(nxs_reader_t *r, const uint8_t *data, size_t size) {
+    if (!r || !data || size < 32) return NXS_ERR_OUT_OF_BOUNDS;
+    memset(r, 0, sizeof(*r));
+    r->data = data;
+    r->size = size;
+
+    if (rd_u32(data) != MAGIC_FILE)   return NXS_ERR_BAD_MAGIC;
+    if (rd_u32(data + size - 4) != MAGIC_FOOTER) return NXS_ERR_BAD_MAGIC;
+
+    r->version  = rd_u16(data + 4);
+    r->flags    = rd_u16(data + 6);
+    r->dict_hash= rd_u64(data + 8);
+    r->tail_ptr = rd_u64(data + 16);
+
+    // Schema (Flags bit 1 set)
+    if (r->flags & FLAG_SCHEMA) {
+        size_t off = 32;
+        if (off + 2 > size) return NXS_ERR_OUT_OF_BOUNDS;
+        uint16_t kc = rd_u16(data + off); off += 2;
+        if (kc > NXS_MAX_KEYS) kc = NXS_MAX_KEYS;
+        if (off + kc > size) return NXS_ERR_OUT_OF_BOUNDS;
+        memcpy(r->key_sigils, data + off, kc);
+        off += kc;
+        r->key_count = (int)kc;
+        char *pool = r->_pool;
+        size_t pool_used = 0;
+        for (int i = 0; i < r->key_count; i++) {
+            const uint8_t *start = data + off;
+            while (off < size && data[off] != 0) off++;
+            if (off >= size) return NXS_ERR_OUT_OF_BOUNDS;
+            size_t len = (size_t)(data + off - start);
+            if (pool_used + len + 1 > sizeof(r->_pool)) return NXS_ERR_OUT_OF_BOUNDS;
+            memcpy(pool + pool_used, start, len);
+            pool[pool_used + len] = '\0';
+            r->keys[i] = pool + pool_used;
+            pool_used += len + 1;
+            off++; // skip NUL
+        }
+    }
+
+    // Tail-index
+    size_t tp = (size_t)r->tail_ptr;
+    if (tp + 4 > size) return NXS_ERR_OUT_OF_BOUNDS;
+    r->record_count = rd_u32(data + tp);
+    r->tail_start   = tp + 4;
+    return NXS_OK;
+}
+
+void nxs_close(nxs_reader_t *r) { (void)r; }
+
+uint32_t nxs_record_count(const nxs_reader_t *r) { return r->record_count; }
+
+int nxs_slot(const nxs_reader_t *r, const char *key) {
+    for (int i = 0; i < r->key_count; i++) {
+        if (strcmp(r->keys[i], key) == 0) return i;
+    }
+    return -1;
+}
+
+// ── Object ────────────────────────────────────────────────────────────────────
+
+nxs_err_t nxs_record(const nxs_reader_t *r, uint32_t i, nxs_object_t *obj) {
+    if (i >= r->record_count) return NXS_ERR_OUT_OF_BOUNDS;
+    size_t entry = r->tail_start + (size_t)i * 10 + 2;
+    if (entry + 8 > r->size) return NXS_ERR_OUT_OF_BOUNDS;
+    uint64_t abs_off = rd_u64(r->data + entry);
+    obj->reader = r;
+    obj->offset = (size_t)abs_off;
+    obj->staged = 0;
+    return NXS_OK;
+}
+
+static nxs_err_t locate_bitmask(nxs_object_t *obj) {
+    if (obj->staged) return NXS_OK;
+    const uint8_t *data = obj->reader->data;
+    size_t p = obj->offset;
+    if (p + 8 > obj->reader->size) return NXS_ERR_OUT_OF_BOUNDS;
+    if (rd_u32(data + p) != MAGIC_OBJ) return NXS_ERR_BAD_MAGIC;
+    p += 8;
+    obj->bitmask_start = p;
+    while (p < obj->reader->size && (data[p] & 0x80)) p++;
+    if (p >= obj->reader->size) return NXS_ERR_OUT_OF_BOUNDS;
+    p++; // include last byte
+    obj->offset_table_start = p;
+    obj->staged = 1;
+    return NXS_OK;
+}
+
+int64_t nxs_resolve_slot(nxs_object_t *obj, int slot) {
+    if (slot < 0) return -1;
+    if (locate_bitmask(obj) != NXS_OK) return -1;
+    const uint8_t *data = obj->reader->data;
+    size_t p = obj->bitmask_start;
+    int cur = 0, table_idx = 0;
+    while (1) {
+        if (p >= obj->reader->size) return -1;
+        uint8_t b = data[p++];
+        uint8_t bits = b & 0x7F;
+        for (int i = 0; i < 7; i++) {
+            if (cur == slot) {
+                if (!((bits >> i) & 1)) return -1;
+                // skip remaining continuation bytes
+                while (b & 0x80) {
+                    if (p >= obj->reader->size) break;
+                    b = data[p++];
+                }
+                size_t ot = obj->offset_table_start + (size_t)table_idx * 2;
+                if (ot + 2 > obj->reader->size) return -1;
+                uint16_t rel = rd_u16(data + ot);
+                return (int64_t)(obj->offset + rel);
+            }
+            if (cur < slot && ((bits >> i) & 1)) table_idx++;
+            cur++;
+        }
+        if (!(b & 0x80)) return -1;
+    }
+}
+
+// ── Typed accessors ───────────────────────────────────────────────────────────
+
+nxs_err_t nxs_get_i64_slot(nxs_object_t *obj, int slot, int64_t *out) {
+    int64_t off = nxs_resolve_slot(obj, slot);
+    if (off < 0) return NXS_ERR_FIELD_ABSENT;
+    if ((size_t)off + 8 > obj->reader->size) return NXS_ERR_OUT_OF_BOUNDS;
+    *out = rd_i64(obj->reader->data + off);
+    return NXS_OK;
+}
+
+nxs_err_t nxs_get_f64_slot(nxs_object_t *obj, int slot, double *out) {
+    int64_t off = nxs_resolve_slot(obj, slot);
+    if (off < 0) return NXS_ERR_FIELD_ABSENT;
+    if ((size_t)off + 8 > obj->reader->size) return NXS_ERR_OUT_OF_BOUNDS;
+    *out = rd_f64(obj->reader->data + off);
+    return NXS_OK;
+}
+
+nxs_err_t nxs_get_bool_slot(nxs_object_t *obj, int slot, int *out) {
+    int64_t off = nxs_resolve_slot(obj, slot);
+    if (off < 0) return NXS_ERR_FIELD_ABSENT;
+    if ((size_t)off >= obj->reader->size) return NXS_ERR_OUT_OF_BOUNDS;
+    *out = obj->reader->data[off] != 0;
+    return NXS_OK;
+}
+
+nxs_err_t nxs_get_str_slot(nxs_object_t *obj, int slot, char *buf, size_t buf_len) {
+    int64_t off = nxs_resolve_slot(obj, slot);
+    if (off < 0) return NXS_ERR_FIELD_ABSENT;
+    const uint8_t *data = obj->reader->data;
+    size_t sz = obj->reader->size;
+    if ((size_t)off + 4 > sz) return NXS_ERR_OUT_OF_BOUNDS;
+    uint32_t len = rd_u32(data + off);
+    if ((size_t)off + 4 + len > sz) return NXS_ERR_OUT_OF_BOUNDS;
+    size_t copy = (len < buf_len - 1) ? len : buf_len - 1;
+    memcpy(buf, data + off + 4, copy);
+    buf[copy] = '\0';
+    return NXS_OK;
+}
+
+nxs_err_t nxs_get_i64(nxs_object_t *obj, const char *key, int64_t *out) {
+    return nxs_get_i64_slot(obj, nxs_slot(obj->reader, key), out);
+}
+nxs_err_t nxs_get_f64(nxs_object_t *obj, const char *key, double *out) {
+    return nxs_get_f64_slot(obj, nxs_slot(obj->reader, key), out);
+}
+nxs_err_t nxs_get_bool(nxs_object_t *obj, const char *key, int *out) {
+    return nxs_get_bool_slot(obj, nxs_slot(obj->reader, key), out);
+}
+nxs_err_t nxs_get_str(nxs_object_t *obj, const char *key, char *buf, size_t buf_len) {
+    return nxs_get_str_slot(obj, nxs_slot(obj->reader, key), buf, buf_len);
+}
+
+// ── Bulk reducers (allocation-free) ──────────────────────────────────────────
+
+static int64_t scan_offset_bulk(const uint8_t *data, size_t obj_off, int slot) {
+    size_t p = obj_off + 8; // skip Magic + Length
+    int cur = 0, table_idx = 0;
+    uint8_t b = 0;
+    int found = 0;
+    while (1) {
+        b = data[p++];
+        uint8_t bits = b & 0x7F;
+        for (int i = 0; i < 7; i++) {
+            if (cur == slot) {
+                if (!((bits >> i) & 1)) return -1;
+                found = 1;
+            } else if (cur < slot && ((bits >> i) & 1)) {
+                table_idx++;
+            }
+            cur++;
+        }
+        if (found && !(b & 0x80)) break;
+        if (cur > slot && found) break;
+        if (!(b & 0x80)) return -1;
+    }
+    while (b & 0x80) b = data[p++];
+    uint16_t rel; memcpy(&rel, data + p + table_idx * 2, 2);
+    return (int64_t)(obj_off + rel);
+}
+
+double nxs_sum_f64(const nxs_reader_t *r, const char *key) {
+    int slot = nxs_slot(r, key);
+    if (slot < 0) return 0.0;
+    const uint8_t *data = r->data;
+    double sum = 0.0;
+    for (uint32_t i = 0; i < r->record_count; i++) {
+        size_t entry = r->tail_start + (size_t)i * 10 + 2;
+        size_t abs = (size_t)rd_u64(data + entry);
+        int64_t off = scan_offset_bulk(data, abs, slot);
+        if (off >= 0) sum += rd_f64(data + off);
+    }
+    return sum;
+}
+
+int64_t nxs_sum_i64(const nxs_reader_t *r, const char *key) {
+    int slot = nxs_slot(r, key);
+    if (slot < 0) return 0;
+    const uint8_t *data = r->data;
+    int64_t sum = 0;
+    for (uint32_t i = 0; i < r->record_count; i++) {
+        size_t entry = r->tail_start + (size_t)i * 10 + 2;
+        size_t abs = (size_t)rd_u64(data + entry);
+        int64_t off = scan_offset_bulk(data, abs, slot);
+        if (off >= 0) sum += rd_i64(data + off);
+    }
+    return sum;
+}
+
+nxs_err_t nxs_min_f64(const nxs_reader_t *r, const char *key, double *out) {
+    int slot = nxs_slot(r, key);
+    if (slot < 0) return NXS_ERR_KEY_NOT_FOUND;
+    const uint8_t *data = r->data;
+    double m = 0.0;
+    int have = 0;
+    for (uint32_t i = 0; i < r->record_count; i++) {
+        size_t entry = r->tail_start + (size_t)i * 10 + 2;
+        size_t abs = (size_t)rd_u64(data + entry);
+        int64_t off = scan_offset_bulk(data, abs, slot);
+        if (off < 0) continue;
+        double v = rd_f64(data + off);
+        if (!have || v < m) { m = v; have = 1; }
+    }
+    if (!have) return NXS_ERR_FIELD_ABSENT;
+    *out = m;
+    return NXS_OK;
+}
+
+nxs_err_t nxs_max_f64(const nxs_reader_t *r, const char *key, double *out) {
+    int slot = nxs_slot(r, key);
+    if (slot < 0) return NXS_ERR_KEY_NOT_FOUND;
+    const uint8_t *data = r->data;
+    double m = 0.0;
+    int have = 0;
+    for (uint32_t i = 0; i < r->record_count; i++) {
+        size_t entry = r->tail_start + (size_t)i * 10 + 2;
+        size_t abs = (size_t)rd_u64(data + entry);
+        int64_t off = scan_offset_bulk(data, abs, slot);
+        if (off < 0) continue;
+        double v = rd_f64(data + off);
+        if (!have || v > m) { m = v; have = 1; }
+    }
+    if (!have) return NXS_ERR_FIELD_ABSENT;
+    *out = m;
+    return NXS_OK;
+}

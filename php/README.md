@@ -1,0 +1,75 @@
+# NXS — PHP
+
+Zero-copy `.nxb` reader for PHP 8.0+. Pure-PHP implementation with an optional C extension for hot-path columnar scans. No Composer, no dependencies.
+
+## Requirements
+
+PHP 8.0+. The C extension requires a C compiler and PHP development headers (`php-dev` / `php-devel`).
+
+## Read a file
+
+```php
+require_once __DIR__ . '/Nxs.php';
+
+$bytes  = file_get_contents('data.nxb');
+$reader = new Nxs\Reader($bytes);
+
+echo $reader->recordCount() . "\n";    // instant — read from tail-index, no parse pass
+$obj = $reader->record(42);            // O(1) seek
+echo $obj->getStr("username") . "\n";
+echo $obj->getF64("score") . "\n";
+echo ($obj->getBool("active") ? "true" : "false") . "\n";
+```
+
+## Columnar reducers
+
+```php
+$total = $reader->sumF64("score");
+$low   = $reader->minF64("score");
+$high  = $reader->maxF64("score");
+$ages  = $reader->sumI64("age");
+```
+
+## C extension (hot path)
+
+Build once:
+
+```bash
+bash nxs_ext/build.sh
+```
+
+```php
+dl(__DIR__ . '/nxs_ext/modules/nxs.so');   // or add extension= to php.ini
+
+$reader = new NxsReader($bytes);
+echo $reader->record(42)->getStr("username") . "\n";
+echo $reader->sumF64("score") . "\n";      // 2.00 ms at 1M records
+```
+
+At 1M records the C extension is **143× faster** than pure PHP for `sumF64`, and **15× faster** than `json_decode`.
+
+## Tests
+
+```bash
+php test.php ../js/fixtures    # 11 tests
+```
+
+## Benchmarks
+
+```bash
+php bench.php ../js/fixtures                                         # pure PHP vs json_decode
+php -d extension=nxs_ext/modules/nxs.so bench_c.php ../js/fixtures  # C extension vs json_decode
+```
+
+## Files
+
+| File | Purpose |
+| :--- | :--- |
+| `Nxs.php` | Pure-PHP reader (`Nxs\Reader`, `Nxs\Object`) |
+| `nxs_ext/nxs_ext.c` | C extension source (`NxsReader`, `NxsObject`) |
+| `nxs_ext/config.m4` | Extension build configuration |
+| `nxs_ext/build.sh` | Compiles the C extension |
+
+---
+
+For the format specification see [`SPEC.md`](../SPEC.md). For cross-language examples see [`GETTING_STARTED.md`](../GETTING_STARTED.md).

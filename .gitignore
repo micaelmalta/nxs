@@ -1,0 +1,75 @@
+# Rust
+rust/target
+# rust/Cargo.lock is intentionally committed for reproducible builds
+
+# Generated fixtures (regenerate with: cargo run --release --bin gen_fixtures -- js/fixtures 1000000)
+js/fixtures/
+
+# Python build artifacts
+py/_nxs.c
+py/_nxs.cpython-*.so
+py/__pycache__/
+js/__pycache__/
+**/__pycache__/
+*.pyc
+
+# Ruby build artifacts
+ruby/ext/nxs/Makefile
+ruby/ext/nxs/*.o
+ruby/ext/nxs/*.bundle
+ruby/ext/nxs/*.bundle.dSYM/
+ruby/ext/nxs/mkmf.log
+
+# PHP build artifacts
+php/nxs_ext/.libs/
+php/nxs_ext/autom4te.cache/
+php/nxs_ext/modules/
+php/nxs_ext/config.h
+php/nxs_ext/config.h.in~
+php/nxs_ext/config.log
+php/nxs_ext/config.nice
+php/nxs_ext/config.status
+php/nxs_ext/configure
+php/nxs_ext/libtool
+php/nxs_ext/Makefile
+php/nxs_ext/Makefile.fragments
+php/nxs_ext/Makefile.objects
+php/nxs_ext/nxs.la
+php/nxs_ext/nxs_ext.c.bak
+php/nxs_ext/*.lo
+php/nxs_ext/*.dep
+
+# Go binaries
+go/bench
+
+# Kotlin / Gradle
+kotlin/.gradle/
+kotlin/build/
+# gradle/wrapper/gradle-wrapper.jar and gradlew are intentionally committed
+
+# WebAssembly build artifacts
+js/wasm/*.wasm
+
+# Editor / tooling
+.playwright-mcp/
+.ruby-lsp/
+docs/index/
+CLAUDE.md
+
+# C compiled binaries
+c/test
+c/bench
+
+# C# build output
+csharp/bin/
+csharp/obj/
+
+# Swift build output
+swift/.build/
+
+# Screenshot artifacts
+*.png
+workers-*.png
+index-*.png
+bench-*.png
+ticker-*.png

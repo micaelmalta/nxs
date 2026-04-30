@@ -1,0 +1,29 @@
+name: C
+
+on:
+  push:
+    paths: ['c/**', '.github/workflows/c.yml', '.github/workflows/fixtures.yml']
+  pull_request:
+    paths: ['c/**', '.github/workflows/c.yml', '.github/workflows/fixtures.yml']
+
+jobs:
+  fixtures:
+    uses: ./.github/workflows/fixtures.yml
+
+  test:
+    needs: fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Build and test
+        working-directory: c
+        run: |
+          make test
+          ./test ../js/fixtures

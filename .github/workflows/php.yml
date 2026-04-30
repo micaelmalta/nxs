@@ -1,0 +1,37 @@
+name: PHP
+
+on:
+  push:
+    paths: ['php/**', '.github/workflows/php.yml', '.github/workflows/fixtures.yml']
+  pull_request:
+    paths: ['php/**', '.github/workflows/php.yml', '.github/workflows/fixtures.yml']
+
+jobs:
+  fixtures:
+    uses: ./.github/workflows/fixtures.yml
+
+  test:
+    needs: fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: none
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Test (pure PHP)
+        run: php php/test.php js/fixtures
+
+      - name: Build C extension
+        run: bash php/nxs_ext/build.sh
+
+      - name: Test (C extension)
+        run: php -d extension=php/nxs_ext/modules/nxs.so php/test.php js/fixtures

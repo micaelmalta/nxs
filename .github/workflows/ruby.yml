@@ -1,0 +1,36 @@
+name: Ruby
+
+on:
+  push:
+    paths: ['ruby/**', '.github/workflows/ruby.yml', '.github/workflows/fixtures.yml']
+  pull_request:
+    paths: ['ruby/**', '.github/workflows/ruby.yml', '.github/workflows/fixtures.yml']
+
+jobs:
+  fixtures:
+    uses: ./.github/workflows/fixtures.yml
+
+  test:
+    needs: fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Test (pure Ruby)
+        run: ruby ruby/test.rb js/fixtures
+
+      - name: Build C extension
+        run: bash ruby/ext/build.sh
+
+      - name: Test (C extension)
+        run: ruby ruby/bench_c.rb js/fixtures

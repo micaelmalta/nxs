@@ -1,0 +1,77 @@
+# NXS — Python
+
+Zero-copy `.nxb` reader for Python 3.8+. Pure-Python implementation with an optional C extension for hot-path columnar scans.
+
+## Requirements
+
+Python 3.8+. No pip install, no dependencies. The C extension requires a C compiler and Python headers.
+
+## Read a file
+
+```python
+from nxs import NxsReader
+
+buf = open("data.nxb", "rb").read()   # or mmap.mmap() for true zero-copy
+reader = NxsReader(buf)
+
+print(reader.record_count)             # instant — read from tail-index, no parse pass
+obj = reader.record(42)                # O(1) seek
+print(obj.get_str("username"))
+print(obj.get_f64("score"))
+print(obj.get_bool("active"))
+```
+
+## Columnar scan
+
+```python
+scores = reader.scan_f64("score")      # list of all values for one field
+
+total = reader.sum_f64("score")
+low   = reader.min_f64("score")
+high  = reader.max_f64("score")
+ages  = reader.sum_i64("age")
+```
+
+## C extension (hot path)
+
+Build once:
+
+```bash
+bash build_ext.sh
+```
+
+Use the same API, significantly faster for columnar work:
+
+```python
+import _nxs
+
+reader = _nxs.Reader(buf)
+print(reader.record(42).get_str("username"))   # ~374 ns vs ~1.2 µs pure Python
+total = reader.sum_f64("score")                # 3.15 ms at 1M records
+```
+
+## Tests
+
+```bash
+python test_nxs.py       # pure-Python
+python test_c_ext.py     # C extension (requires build_ext.sh first)
+```
+
+## Benchmarks
+
+```bash
+python bench.py          # pure-Python vs json.loads
+python bench_c.py        # C extension vs json.loads
+```
+
+## Files
+
+| File | Purpose |
+| :--- | :--- |
+| `nxs.py` | Pure-Python reader |
+| `_nxs.c` | C extension source |
+| `build_ext.sh` | Compiles `_nxs.c` → `_nxs.cpython-*.so` |
+
+---
+
+For the format specification see [`SPEC.md`](../SPEC.md). For cross-language examples see [`GETTING_STARTED.md`](../GETTING_STARTED.md).

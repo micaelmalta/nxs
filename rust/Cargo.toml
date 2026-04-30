@@ -1,0 +1,24 @@
+[package]
+name = "nxs"
+version = "0.1.0"
+edition = "2024"
+authors = ["Micael Malta"]
+license = "MIT"
+
+[[bin]]
+name = "nxs"
+path = "src/main.rs"
+
+[[bin]]
+name = "bench"
+path = "src/bench.rs"
+
+[[bin]]
+name = "gen_fixtures"
+path = "src/gen_fixtures.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]

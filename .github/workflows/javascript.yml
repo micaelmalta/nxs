@@ -1,0 +1,30 @@
+name: JavaScript
+
+on:
+  push:
+    paths: ['js/**', '.github/workflows/javascript.yml', '.github/workflows/fixtures.yml']
+  pull_request:
+    paths: ['js/**', '.github/workflows/javascript.yml', '.github/workflows/fixtures.yml']
+
+jobs:
+  fixtures:
+    uses: ./.github/workflows/fixtures.yml
+
+  test:
+    needs: fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Test
+        run: node js/test.js js/fixtures

@@ -1,0 +1,37 @@
+name: Python
+
+on:
+  push:
+    paths: ['py/**', '.github/workflows/python.yml', '.github/workflows/fixtures.yml']
+  pull_request:
+    paths: ['py/**', '.github/workflows/python.yml', '.github/workflows/fixtures.yml']
+
+jobs:
+  fixtures:
+    uses: ./.github/workflows/fixtures.yml
+
+  test:
+    needs: fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Download fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: fixtures-${{ github.sha }}
+          path: js/fixtures/
+
+      - name: Test (pure Python)
+        run: python py/test_nxs.py js/fixtures
+
+      - name: Build C extension
+        working-directory: py
+        run: bash build_ext.sh
+
+      - name: Test (C extension)
+        run: python py/test_c_ext.py js/fixtures

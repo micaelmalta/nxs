@@ -1,0 +1,40 @@
+name: Rust
+
+on:
+  push:
+    paths: ['rust/**', 'examples/**', '.github/workflows/rust.yml']
+  pull_request:
+    paths: ['rust/**', 'examples/**', '.github/workflows/rust.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: rust-
+
+      - name: Test
+        run: cargo test --release
+
+      - name: Build compiler
+        run: cargo build --release --bin nxs
+
+      - name: Compile example files
+        run: |
+          for f in ../examples/*.nxs; do
+            ./target/release/nxs "$f"
+            echo "compiled $f"
+          done
