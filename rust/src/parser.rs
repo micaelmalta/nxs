@@ -33,7 +33,11 @@ const MAX_DEPTH: usize = 64;
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, pos: 0, depth: 0 }
+        Parser {
+            tokens,
+            pos: 0,
+            depth: 0,
+        }
     }
 
     fn peek(&self) -> &Token {
@@ -51,7 +55,9 @@ impl Parser {
         if &t == expected {
             Ok(())
         } else {
-            Err(NxsError::ParseError(format!("expected {expected:?}, got {t:?}")))
+            Err(NxsError::ParseError(format!(
+                "expected {expected:?}, got {t:?}"
+            )))
         }
     }
 
@@ -66,7 +72,11 @@ impl Parser {
     fn parse_field(&mut self) -> Result<Field> {
         let key = match self.advance().clone() {
             Token::Ident(s) => s,
-            other => return Err(NxsError::ParseError(format!("expected field key, got {other:?}"))),
+            other => {
+                return Err(NxsError::ParseError(format!(
+                    "expected field key, got {other:?}"
+                )));
+            }
         };
 
         // Colon is optional if followed by `{` (shorthand object syntax)
@@ -82,17 +92,49 @@ impl Parser {
         match self.peek().clone() {
             Token::LBrace => self.parse_object(),
             Token::LBracket => self.parse_list(),
-            Token::Int(n) => { self.advance(); Ok(Value::Int(n)) }
-            Token::Float(f) => { self.advance(); Ok(Value::Float(f)) }
-            Token::Bool(b) => { self.advance(); Ok(Value::Bool(b)) }
-            Token::Keyword(s) => { self.advance(); Ok(Value::Keyword(s)) }
-            Token::Str(s) => { self.advance(); Ok(Value::Str(s)) }
-            Token::Time(ns) => { self.advance(); Ok(Value::Time(ns)) }
-            Token::Binary(b) => { self.advance(); Ok(Value::Binary(b)) }
-            Token::Link(n) => { self.advance(); Ok(Value::Link(n)) }
-            Token::Macro(s) => { self.advance(); Ok(Value::Macro(s)) }
-            Token::Null => { self.advance(); Ok(Value::Null) }
-            other => Err(NxsError::ParseError(format!("unexpected token for value: {other:?}"))),
+            Token::Int(n) => {
+                self.advance();
+                Ok(Value::Int(n))
+            }
+            Token::Float(f) => {
+                self.advance();
+                Ok(Value::Float(f))
+            }
+            Token::Bool(b) => {
+                self.advance();
+                Ok(Value::Bool(b))
+            }
+            Token::Keyword(s) => {
+                self.advance();
+                Ok(Value::Keyword(s))
+            }
+            Token::Str(s) => {
+                self.advance();
+                Ok(Value::Str(s))
+            }
+            Token::Time(ns) => {
+                self.advance();
+                Ok(Value::Time(ns))
+            }
+            Token::Binary(b) => {
+                self.advance();
+                Ok(Value::Binary(b))
+            }
+            Token::Link(n) => {
+                self.advance();
+                Ok(Value::Link(n))
+            }
+            Token::Macro(s) => {
+                self.advance();
+                Ok(Value::Macro(s))
+            }
+            Token::Null => {
+                self.advance();
+                Ok(Value::Null)
+            }
+            other => Err(NxsError::ParseError(format!(
+                "unexpected token for value: {other:?}"
+            ))),
         }
     }
 
@@ -106,7 +148,9 @@ impl Parser {
         while self.peek() != &Token::RBrace && self.peek() != &Token::Eof {
             fields.push(self.parse_field()?);
             // optional comma between fields
-            if self.peek() == &Token::Comma { self.advance(); }
+            if self.peek() == &Token::Comma {
+                self.advance();
+            }
         }
         self.expect(&Token::RBrace)?;
         self.depth -= 1;
@@ -127,7 +171,9 @@ impl Parser {
                 _ => {}
             }
             elems.push(v);
-            if self.peek() == &Token::Comma { self.advance(); }
+            if self.peek() == &Token::Comma {
+                self.advance();
+            }
         }
         self.expect(&Token::RBracket)?;
         Ok(Value::List(elems))

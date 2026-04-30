@@ -178,7 +178,7 @@ func (r *Reader) Record(i int) *Object {
 type Object struct {
 	reader           *Reader
 	offset           int
-	stage            int    // 0=untouched, 1=bitmask located, 2=rank cached
+	stage            int // 0=untouched, 1=bitmask located, 2=rank cached
 	bitmaskStart     int
 	offsetTableStart int
 	// Stage 2 caches:

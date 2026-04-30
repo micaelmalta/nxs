@@ -31,19 +31,28 @@ impl JV {
     fn to_json(&self) -> String {
         match self {
             JV::Null => "null".to_string(),
-            JV::Bool(b) => if *b { "true".to_string() } else { "false".to_string() },
+            JV::Bool(b) => {
+                if *b {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                }
+            }
             JV::Int(i) => i.to_string(),
             JV::Float(f) => {
-                if f.is_nan() { "null".to_string() }
-                else if f.is_infinite() { "null".to_string() }
-                else {
+                if f.is_nan() {
+                    "null".to_string()
+                } else if f.is_infinite() {
+                    "null".to_string()
+                } else {
                     // Use enough precision to round-trip
                     let s = format!("{:.17}", f);
                     // Trim trailing zeros after decimal point
                     let s = s.trim_end_matches('0');
                     let s = s.trim_end_matches('.');
-                    if s.is_empty() || s == "-" { "0.0".to_string() }
-                    else if !s.contains('.') && !s.contains('e') {
+                    if s.is_empty() || s == "-" {
+                        "0.0".to_string()
+                    } else if !s.contains('.') && !s.contains('e') {
                         format!("{}.0", s)
                     } else {
                         s.to_string()
@@ -73,7 +82,8 @@ impl JV {
                 format!("[{}]", items.join(","))
             }
             JV::Object(fields) => {
-                let items: Vec<String> = fields.iter()
+                let items: Vec<String> = fields
+                    .iter()
                     .map(|(k, v)| format!("{}:{}", JV::Str(k.clone()).to_json(), v.to_json()))
                     .collect();
                 format!("{{{}}}", items.join(","))
@@ -94,18 +104,24 @@ struct Vector {
 
 fn expected_json(keys: &[&str], records: &[Vec<Option<(&str, JV)>>]) -> String {
     // records: each element is a list of (key, value) pairs (None = absent)
-    let key_arr = keys.iter()
+    let key_arr = keys
+        .iter()
         .map(|k| JV::Str(k.to_string()).to_json())
         .collect::<Vec<_>>()
         .join(",");
 
-    let rec_arr = records.iter().map(|rec| {
-        let fields: Vec<String> = rec.iter()
-            .filter_map(|f| f.as_ref())
-            .map(|(k, v)| format!("{}:{}", JV::Str(k.to_string()).to_json(), v.to_json()))
-            .collect();
-        format!("{{{}}}", fields.join(","))
-    }).collect::<Vec<_>>().join(",");
+    let rec_arr = records
+        .iter()
+        .map(|rec| {
+            let fields: Vec<String> = rec
+                .iter()
+                .filter_map(|f| f.as_ref())
+                .map(|(k, v)| format!("{}:{}", JV::Str(k.to_string()).to_json(), v.to_json()))
+                .collect();
+            format!("{{{}}}", fields.join(","))
+        })
+        .collect::<Vec<_>>()
+        .join(",");
 
     format!(
         "{{\"record_count\":{},\"keys\":[{}],\"records\":[{}]}}",
@@ -136,11 +152,22 @@ fn make_minimal() -> Vector {
             Some(("active", JV::Bool(true))),
         ]],
     );
-    Vector { name: "minimal", nxb, expected }
+    Vector {
+        name: "minimal",
+        nxb,
+        expected,
+    }
 }
 
 fn make_all_sigils() -> Vector {
-    let schema = Schema::new(&["i64_val", "f64_val", "bool_val", "str_val", "time_val", "bytes_val"]);
+    let schema = Schema::new(&[
+        "i64_val",
+        "f64_val",
+        "bool_val",
+        "str_val",
+        "time_val",
+        "bytes_val",
+    ]);
     let mut w = NxsWriter::new(&schema);
 
     w.begin_object();
@@ -155,7 +182,14 @@ fn make_all_sigils() -> Vector {
     let nxb = w.finish();
     // bytes_val is omitted from the records assertion (binary support is optional)
     let expected = expected_json(
-        &["i64_val", "f64_val", "bool_val", "str_val", "time_val", "bytes_val"],
+        &[
+            "i64_val",
+            "f64_val",
+            "bool_val",
+            "str_val",
+            "time_val",
+            "bytes_val",
+        ],
         &[vec![
             Some(("i64_val", JV::Int(-9876543210_i64))),
             Some(("f64_val", JV::Float(3.14159265358979))),
@@ -165,7 +199,11 @@ fn make_all_sigils() -> Vector {
             // bytes_val intentionally absent from record assertions (binary optional)
         ]],
     );
-    Vector { name: "all_sigils", nxb, expected }
+    Vector {
+        name: "all_sigils",
+        nxb,
+        expected,
+    }
 }
 
 fn make_null_vs_absent() -> Vector {
@@ -202,7 +240,11 @@ fn make_null_vs_absent() -> Vector {
          {{\"id\":3}}\
          ]}}"
     );
-    Vector { name: "null_vs_absent", nxb, expected }
+    Vector {
+        name: "null_vs_absent",
+        nxb,
+        expected,
+    }
 }
 
 fn make_sparse() -> Vector {
@@ -276,7 +318,11 @@ fn make_sparse() -> Vector {
         "{{\"record_count\":100,\"keys\":[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\",\"h\"],\"records\":[{}]}}",
         records_json.join(",")
     );
-    Vector { name: "sparse", nxb, expected }
+    Vector {
+        name: "sparse",
+        nxb,
+        expected,
+    }
 }
 
 fn make_nested() -> Vector {
@@ -296,9 +342,9 @@ inner {
 }
 "#;
 
+    use nxs::compiler::Compiler;
     use nxs::lexer::Lexer;
     use nxs::parser::Parser;
-    use nxs::compiler::Compiler;
 
     let tokens = Lexer::new(src).tokenize().expect("lex");
     let fields = Parser::new(tokens).parse_file().expect("parse");
@@ -310,9 +356,7 @@ inner {
     // We generate expected from the actual decoded file.
     use nxs::decoder::decode;
     let decoded = decode(&nxb).expect("decode nested");
-    let keys_json: Vec<String> = decoded.keys.iter()
-        .map(|k| format!("\"{}\"", k))
-        .collect();
+    let keys_json: Vec<String> = decoded.keys.iter().map(|k| format!("\"{}\"", k)).collect();
     // Only record top-level integer and string fields for the expected record
     // (nested objects are returned as Raw and skipped)
     let mut rec_fields: Vec<String> = Vec::new();
@@ -332,7 +376,11 @@ inner {
         rec_fields.join(",")
     );
 
-    Vector { name: "nested", nxb, expected: expected.to_string() }
+    Vector {
+        name: "nested",
+        nxb,
+        expected: expected.to_string(),
+    }
 }
 
 fn make_list_i64() -> Vector {
@@ -353,14 +401,25 @@ fn make_list_i64() -> Vector {
         "{{\"record_count\":1,\"keys\":[\"id\",\"values\"],\"records\":[{{\"id\":1,\"values\":[{}]}}]}}",
         vals_json.join(",")
     );
-    Vector { name: "list_i64", nxb, expected }
+    Vector {
+        name: "list_i64",
+        nxb,
+        expected,
+    }
 }
 
 fn make_list_f64() -> Vector {
     let schema = Schema::new(&["id", "values"]);
     let mut w = NxsWriter::new(&schema);
 
-    let vals: Vec<f64> = vec![1.1, 2.2, 3.3, -4.4, 0.0, f64::INFINITY.is_finite().then(|| 0.0).unwrap_or(0.0)];
+    let vals: Vec<f64> = vec![
+        1.1,
+        2.2,
+        3.3,
+        -4.4,
+        0.0,
+        f64::INFINITY.is_finite().then(|| 0.0).unwrap_or(0.0),
+    ];
     let vals: Vec<f64> = vec![1.1, 2.2, 3.3, -4.4, 0.0, 1e100];
 
     w.begin_object();
@@ -375,7 +434,11 @@ fn make_list_f64() -> Vector {
         "{{\"record_count\":1,\"keys\":[\"id\",\"values\"],\"records\":[{{\"id\":2,\"values\":[{}]}}]}}",
         vals_json.join(",")
     );
-    Vector { name: "list_f64", nxb, expected }
+    Vector {
+        name: "list_f64",
+        nxb,
+        expected,
+    }
 }
 
 fn make_unicode_strings() -> Vector {
@@ -407,7 +470,11 @@ fn make_unicode_strings() -> Vector {
             Some(("mixed", JV::Str(mixed.into()))),
         ]],
     );
-    Vector { name: "unicode_strings", nxb, expected }
+    Vector {
+        name: "unicode_strings",
+        nxb,
+        expected,
+    }
 }
 
 fn make_large() -> Vector {
@@ -428,12 +495,20 @@ fn make_large() -> Vector {
     // to keep the file small — runners must check all N records
     // but we only validate record_count and spot-check boundary records
     let rec0 = format!("{{\"id\":0,\"value\":{}}}", JV::Float(0.0).to_json());
-    let rec_last = format!("{{\"id\":{},\"value\":{}}}", n-1, JV::Float((n-1) as f64 * 0.1).to_json());
+    let rec_last = format!(
+        "{{\"id\":{},\"value\":{}}}",
+        n - 1,
+        JV::Float((n - 1) as f64 * 0.1).to_json()
+    );
 
     // Include all records (runners will validate them all)
     let mut recs: Vec<String> = Vec::with_capacity(n);
     for i in 0..n {
-        recs.push(format!("{{\"id\":{},\"value\":{}}}", i, JV::Float(i as f64 * 0.1).to_json()));
+        recs.push(format!(
+            "{{\"id\":{},\"value\":{}}}",
+            i,
+            JV::Float(i as f64 * 0.1).to_json()
+        ));
     }
     let _ = (rec0, rec_last); // suppress warnings
 
@@ -442,7 +517,11 @@ fn make_large() -> Vector {
         n,
         recs.join(",")
     );
-    Vector { name: "large", nxb, expected }
+    Vector {
+        name: "large",
+        nxb,
+        expected,
+    }
 }
 
 fn make_max_keys() -> Vector {
@@ -473,7 +552,11 @@ fn make_max_keys() -> Vector {
         keys_json.join(","),
         fields_json.join(",")
     );
-    Vector { name: "max_keys", nxb, expected }
+    Vector {
+        name: "max_keys",
+        nxb,
+        expected,
+    }
 }
 
 fn make_jumbo_string() -> Vector {
@@ -501,7 +584,11 @@ fn make_jumbo_string() -> Vector {
         "{{\"record_count\":1,\"keys\":[\"id\",\"blob\"],\"records\":[{{\"id\":99,\"blob\":{}}}]}}",
         JV::Str(s).to_json()
     );
-    Vector { name: "jumbo_string", nxb, expected }
+    Vector {
+        name: "jumbo_string",
+        nxb,
+        expected,
+    }
 }
 
 // ── Negative vectors ──────────────────────────────────────────────────────────
@@ -514,7 +601,10 @@ fn make_bad_magic() -> (Vec<u8>, String) {
     w.write_i64(Slot(0), 1);
     w.end_object();
     let mut nxb = w.finish();
-    nxb[0] = 0xFF; nxb[1] = 0xFF; nxb[2] = 0xFF; nxb[3] = 0xFF;
+    nxb[0] = 0xFF;
+    nxb[1] = 0xFF;
+    nxb[2] = 0xFF;
+    nxb[3] = 0xFF;
     let expected = r#"{"error":"ERR_BAD_MAGIC"}"#.to_string();
     (nxb, expected)
 }
@@ -551,7 +641,11 @@ fn make_truncated() -> (Vec<u8>, String) {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let out_dir = if args.len() > 1 { args[1].clone() } else { "conformance".to_string() };
+    let out_dir = if args.len() > 1 {
+        args[1].clone()
+    } else {
+        "conformance".to_string()
+    };
     let out_path = Path::new(&out_dir);
 
     fs::create_dir_all(out_path).expect("create output directory");
@@ -576,10 +670,16 @@ fn main() {
     for v in positive.iter().chain(std::iter::once(&nested)) {
         let nxb_path = out_path.join(format!("{}.nxb", v.name));
         let json_path = out_path.join(format!("{}.expected.json", v.name));
-        fs::write(&nxb_path, &v.nxb).unwrap_or_else(|e| panic!("write {}: {e}", nxb_path.display()));
-        fs::write(&json_path, &v.expected).unwrap_or_else(|e| panic!("write {}: {e}", json_path.display()));
-        println!("  wrote {}.nxb ({} bytes) + .expected.json ({} bytes)",
-            v.name, v.nxb.len(), v.expected.len());
+        fs::write(&nxb_path, &v.nxb)
+            .unwrap_or_else(|e| panic!("write {}: {e}", nxb_path.display()));
+        fs::write(&json_path, &v.expected)
+            .unwrap_or_else(|e| panic!("write {}: {e}", json_path.display()));
+        println!(
+            "  wrote {}.nxb ({} bytes) + .expected.json ({} bytes)",
+            v.name,
+            v.nxb.len(),
+            v.expected.len()
+        );
     }
 
     // Negative vectors
@@ -598,5 +698,8 @@ fn main() {
     fs::write(out_path.join("truncated.expected.json"), &trunc_json).unwrap();
     println!("  wrote truncated.nxb + .expected.json");
 
-    println!("\nAll conformance vectors written to: {}", out_path.display());
+    println!(
+        "\nAll conformance vectors written to: {}",
+        out_path.display()
+    );
 }

@@ -50,7 +50,7 @@ func (s *Schema) Len() int { return len(s.Keys) }
 type frame struct {
 	start       int
 	bitmask     []byte
-	offsetTable []int  // relative offsets in write order
+	offsetTable []int // relative offsets in write order
 	slotOffsets []slotOff
 	lastSlot    int
 	needsSort   bool
@@ -182,27 +182,34 @@ func (w *Writer) Finish() []byte {
 	}
 
 	schemaBytes := buildSchemaBytes(w.schema.Keys)
-	dictHash    := murmur3_64(schemaBytes)
+	dictHash := murmur3_64(schemaBytes)
 	dataStartAbs := uint64(32 + len(schemaBytes))
 
 	dataSector := w.buf
-	tailPtr    := dataStartAbs + uint64(len(dataSector))
-	tail       := buildTailIndexRecords(dataStartAbs, w.recordOffsets)
+	tailPtr := dataStartAbs + uint64(len(dataSector))
+	tail := buildTailIndexRecords(dataStartAbs, w.recordOffsets)
 
 	total := 32 + len(schemaBytes) + len(dataSector) + len(tail)
-	out   := make([]byte, total)
-	p     := 0
+	out := make([]byte, total)
+	p := 0
 
 	// Preamble
-	binary.LittleEndian.PutUint32(out[p:], magicFile);  p += 4
-	binary.LittleEndian.PutUint16(out[p:], 0x0100);     p += 2 // VERSION
-	binary.LittleEndian.PutUint16(out[p:], 0x0002);     p += 2 // FLAG_SCHEMA_EMBEDDED
-	binary.LittleEndian.PutUint64(out[p:], dictHash);   p += 8
-	binary.LittleEndian.PutUint64(out[p:], tailPtr);    p += 8
+	binary.LittleEndian.PutUint32(out[p:], magicFile)
+	p += 4
+	binary.LittleEndian.PutUint16(out[p:], 0x0100)
+	p += 2 // VERSION
+	binary.LittleEndian.PutUint16(out[p:], 0x0002)
+	p += 2 // FLAG_SCHEMA_EMBEDDED
+	binary.LittleEndian.PutUint64(out[p:], dictHash)
+	p += 8
+	binary.LittleEndian.PutUint64(out[p:], tailPtr)
+	p += 8
 	p += 8 // reserved
 
-	copy(out[p:], schemaBytes);  p += len(schemaBytes)
-	copy(out[p:], dataSector);   p += len(dataSector)
+	copy(out[p:], schemaBytes)
+	p += len(schemaBytes)
+	copy(out[p:], dataSector)
+	p += len(dataSector)
 	copy(out[p:], tail)
 
 	return out
@@ -335,7 +342,7 @@ func (w *Writer) markSlot(slot int) {
 	f := &w.frames[len(w.frames)-1]
 
 	byteIdx := slot / 7
-	bitIdx  := uint(slot % 7)
+	bitIdx := uint(slot % 7)
 	f.bitmask[byteIdx] |= 1 << bitIdx
 
 	rel := len(w.buf) - f.start
@@ -367,13 +374,17 @@ func buildSchemaBytes(keys []string) []byte {
 
 	buf := make([]byte, size)
 	p := 0
-	binary.LittleEndian.PutUint16(buf[p:], uint16(n)); p += 2
+	binary.LittleEndian.PutUint16(buf[p:], uint16(n))
+	p += 2
 	for range keys {
-		buf[p] = 0x22; p++ // '"' sigil
+		buf[p] = 0x22
+		p++ // '"' sigil
 	}
 	for _, k := range keys {
-		copy(buf[p:], k); p += len(k)
-		buf[p] = 0x00;    p++
+		copy(buf[p:], k)
+		p += len(k)
+		buf[p] = 0x00
+		p++
 	}
 	// Remaining bytes are zero (make initialises to 0)
 	return buf
@@ -385,11 +396,14 @@ func buildTailIndexRecords(dataStart uint64, recordOffsets []int) []byte {
 	buf := make([]byte, 4+n*10+8)
 	p := 0
 
-	binary.LittleEndian.PutUint32(buf[p:], uint32(n)); p += 4
+	binary.LittleEndian.PutUint32(buf[p:], uint32(n))
+	p += 4
 
 	for i, relOff := range recordOffsets {
-		binary.LittleEndian.PutUint16(buf[p:], uint16(i)); p += 2
-		binary.LittleEndian.PutUint64(buf[p:], dataStart+uint64(relOff)); p += 8
+		binary.LittleEndian.PutUint16(buf[p:], uint16(i))
+		p += 2
+		binary.LittleEndian.PutUint64(buf[p:], dataStart+uint64(relOff))
+		p += 8
 	}
 
 	// FooterPtr = 0

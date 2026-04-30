@@ -20,7 +20,7 @@ Usage::
 from __future__ import annotations
 
 import struct
-from typing import Any, List, Optional
+from typing import List
 
 # ── Format constants ─────────────────────────────────────────────────────────
 

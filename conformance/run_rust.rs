@@ -10,7 +10,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-use nxs::decoder::{decode, DecodedValue};
+use nxs::decoder::{DecodedValue, decode};
 use nxs::error::NxsError;
 
 // ── Minimal JSON parser for expected.json ─────────────────────────────────────
@@ -37,22 +37,36 @@ fn parse_value(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Jv {
         Some('"') => Jv::Str(parse_string(chars)),
         Some('{') => parse_object(chars),
         Some('[') => parse_array(chars),
-        Some('t') => { consume_lit(chars, "true"); Jv::Bool(true) }
-        Some('f') => { consume_lit(chars, "false"); Jv::Bool(false) }
-        Some('n') => { consume_lit(chars, "null"); Jv::Null }
+        Some('t') => {
+            consume_lit(chars, "true");
+            Jv::Bool(true)
+        }
+        Some('f') => {
+            consume_lit(chars, "false");
+            Jv::Bool(false)
+        }
+        Some('n') => {
+            consume_lit(chars, "null");
+            Jv::Null
+        }
         Some(c) if *c == '-' || c.is_ascii_digit() => parse_number(chars),
         _ => Jv::Null,
     }
 }
 
 fn skip_ws(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
-    while matches!(chars.peek(), Some(' ') | Some('\n') | Some('\r') | Some('\t')) {
+    while matches!(
+        chars.peek(),
+        Some(' ') | Some('\n') | Some('\r') | Some('\t')
+    ) {
         chars.next();
     }
 }
 
 fn consume_lit(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, lit: &str) {
-    for _ in lit.chars() { chars.next(); }
+    for _ in lit.chars() {
+        chars.next();
+    }
 }
 
 fn parse_string(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
@@ -90,7 +104,9 @@ fn parse_number(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Jv {
     let mut is_float = false;
     while let Some(&c) = chars.peek() {
         if c == '-' || c.is_ascii_digit() || c == '.' || c == 'e' || c == 'E' || c == '+' {
-            if c == '.' || c == 'e' || c == 'E' { is_float = true; }
+            if c == '.' || c == 'e' || c == 'E' {
+                is_float = true;
+            }
             num.push(c);
             chars.next();
         } else {
@@ -110,8 +126,13 @@ fn parse_object(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Jv {
     loop {
         skip_ws(chars);
         match chars.peek() {
-            Some('}') => { chars.next(); break; }
-            Some(',') => { chars.next(); }
+            Some('}') => {
+                chars.next();
+                break;
+            }
+            Some(',') => {
+                chars.next();
+            }
             Some('"') => {
                 let k = parse_string(chars);
                 skip_ws(chars);
@@ -120,7 +141,9 @@ fn parse_object(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Jv {
                 let v = parse_value(chars);
                 fields.push((k, v));
             }
-            _ => { chars.next(); }
+            _ => {
+                chars.next();
+            }
         }
     }
     Jv::Object(fields)
@@ -132,8 +155,13 @@ fn parse_array(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Jv {
     loop {
         skip_ws(chars);
         match chars.peek() {
-            Some(']') => { chars.next(); break; }
-            Some(',') => { chars.next(); }
+            Some(']') => {
+                chars.next();
+                break;
+            }
+            Some(',') => {
+                chars.next();
+            }
             Some(_) => {
                 items.push(parse_value(chars));
             }
@@ -146,10 +174,16 @@ fn parse_array(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Jv {
 // ── Comparison helpers ────────────────────────────────────────────────────────
 
 fn approx_eq(a: f64, b: f64) -> bool {
-    if a == b { return true; }
+    if a == b {
+        return true;
+    }
     let diff = (a - b).abs();
     let mag = a.abs().max(b.abs());
-    if mag < 1e-300 { diff < 1e-300 } else { diff / mag < 1e-9 }
+    if mag < 1e-300 {
+        diff < 1e-300
+    } else {
+        diff / mag < 1e-9
+    }
 }
 
 fn decoded_matches(decoded: &DecodedValue, expected: &Jv) -> bool {
@@ -165,15 +199,23 @@ fn decoded_matches(decoded: &DecodedValue, expected: &Jv) -> bool {
         (DecodedValue::Raw(_), _) => true, // skip nested/raw
         // List comparisons
         (DecodedValue::List(items), Jv::Array(arr)) => {
-            if items.len() != arr.len() { return false; }
-            items.iter().zip(arr.iter()).all(|(a, b)| decoded_matches(a, b))
+            if items.len() != arr.len() {
+                return false;
+            }
+            items
+                .iter()
+                .zip(arr.iter())
+                .all(|(a, b)| decoded_matches(a, b))
         }
         // Binary decoded as Array of ints
         (DecodedValue::Binary(bytes), Jv::Array(arr)) => {
-            if bytes.len() != arr.len() { return false; }
-            bytes.iter().zip(arr.iter()).all(|(b, e)| {
-                matches!(e, Jv::Int(n) if *n == *b as i64)
-            })
+            if bytes.len() != arr.len() {
+                return false;
+            }
+            bytes
+                .iter()
+                .zip(arr.iter())
+                .all(|(b, e)| matches!(e, Jv::Int(n) if *n == *b as i64))
         }
         _ => false,
     }
@@ -183,22 +225,28 @@ fn decoded_matches(decoded: &DecodedValue, expected: &Jv) -> bool {
 
 fn run_positive(dir: &Path, name: &str, expected_json: &Jv) -> Result<(), String> {
     let nxb_path = dir.join(format!("{}.nxb", name));
-    let data = fs::read(&nxb_path)
-        .map_err(|e| format!("read {}: {}", nxb_path.display(), e))?;
+    let data = fs::read(&nxb_path).map_err(|e| format!("read {}: {}", nxb_path.display(), e))?;
 
     let file = decode(&data).map_err(|e| format!("{}: decode failed: {}", name, e))?;
 
     let (exp_count, exp_keys, exp_records) = match expected_json {
         Jv::Object(fields) => {
-            let map: HashMap<&str, &Jv> = fields.iter().map(|(k,v)| (k.as_str(),v)).collect();
+            let map: HashMap<&str, &Jv> = fields.iter().map(|(k, v)| (k.as_str(), v)).collect();
             let count = match map.get("record_count") {
                 Some(Jv::Int(n)) => *n as usize,
                 _ => return Err(format!("{}: missing record_count", name)),
             };
             let keys = match map.get("keys") {
-                Some(Jv::Array(ks)) => ks.iter().filter_map(|k| {
-                    if let Jv::Str(s) = k { Some(s.as_str()) } else { None }
-                }).collect::<Vec<_>>(),
+                Some(Jv::Array(ks)) => ks
+                    .iter()
+                    .filter_map(|k| {
+                        if let Jv::Str(s) = k {
+                            Some(s.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>(),
                 _ => return Err(format!("{}: missing keys", name)),
             };
             let records = match map.get("records") {
@@ -221,15 +269,20 @@ fn run_positive(dir: &Path, name: &str, expected_json: &Jv) -> Result<(), String
     for (i, key) in exp_keys.iter().enumerate() {
         if let Some(actual) = file.keys.get(i) {
             if actual != key {
-                return Err(format!("{}: key[{}] expected {:?} got {:?}", name, i, key, actual));
+                return Err(format!(
+                    "{}: key[{}] expected {:?} got {:?}",
+                    name, i, key, actual
+                ));
             }
         }
     }
 
     // Validate first record's fields against expected records[0]
     if let Some(Jv::Object(exp_rec)) = exp_records.first() {
-        let decoded_map: HashMap<&str, &DecodedValue> = file.root_fields.iter()
-            .map(|(k,v)| (k.as_str(), v))
+        let decoded_map: HashMap<&str, &DecodedValue> = file
+            .root_fields
+            .iter()
+            .map(|(k, v)| (k.as_str(), v))
             .collect();
         for (key, exp_val) in exp_rec {
             if let Some(decoded_val) = decoded_map.get(key.as_str()) {
@@ -251,8 +304,7 @@ fn run_positive(dir: &Path, name: &str, expected_json: &Jv) -> Result<(), String
 
 fn run_negative(dir: &Path, name: &str, expected_code: &str) -> Result<(), String> {
     let nxb_path = dir.join(format!("{}.nxb", name));
-    let data = fs::read(&nxb_path)
-        .map_err(|e| format!("read {}: {}", nxb_path.display(), e))?;
+    let data = fs::read(&nxb_path).map_err(|e| format!("read {}: {}", nxb_path.display(), e))?;
 
     match decode(&data) {
         Err(e) => {
@@ -263,18 +315,28 @@ fn run_negative(dir: &Path, name: &str, expected_code: &str) -> Result<(), Strin
                 _ => "ERR_UNKNOWN",
             };
             if code != expected_code {
-                Err(format!("{}: expected error {:?} got {:?}", name, expected_code, code))
+                Err(format!(
+                    "{}: expected error {:?} got {:?}",
+                    name, expected_code, code
+                ))
             } else {
                 Ok(())
             }
         }
-        Ok(_) => Err(format!("{}: expected error {:?} but decode succeeded", name, expected_code)),
+        Ok(_) => Err(format!(
+            "{}: expected error {:?} but decode succeeded",
+            name, expected_code
+        )),
     }
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let dir_str = if args.len() > 1 { args[1].clone() } else { "conformance".to_string() };
+    let dir_str = if args.len() > 1 {
+        args[1].clone()
+    } else {
+        "conformance".to_string()
+    };
     let dir = Path::new(&dir_str);
 
     let mut pass = 0usize;
@@ -297,8 +359,8 @@ fn main() {
 
     for name in &entries {
         let json_path = dir.join(format!("{}.expected.json", name));
-        let json_str = fs::read_to_string(&json_path)
-            .expect(&format!("read {}", json_path.display()));
+        let json_str =
+            fs::read_to_string(&json_path).expect(&format!("read {}", json_path.display()));
         let expected = parse_json(&json_str);
 
         // Determine if positive or negative
@@ -308,9 +370,16 @@ fn main() {
 
         let result = if is_negative {
             let code = match &expected {
-                Jv::Object(fields) => fields.iter()
-                    .find(|(k,_)| k == "error")
-                    .and_then(|(_,v)| if let Jv::Str(s) = v { Some(s.clone()) } else { None })
+                Jv::Object(fields) => fields
+                    .iter()
+                    .find(|(k, _)| k == "error")
+                    .and_then(|(_, v)| {
+                        if let Jv::Str(s) = v {
+                            Some(s.clone())
+                        } else {
+                            None
+                        }
+                    })
                     .unwrap_or_default(),
                 _ => String::new(),
             };

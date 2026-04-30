@@ -1,24 +1,33 @@
+mod compiler;
+mod decoder;
 /// Generates matching .nxb and .json fixtures for the JS benchmark.
 /// Usage: cargo run --release --bin gen_fixtures -- <out_dir> [sizes...]
 mod error;
 mod lexer;
 mod parser;
-mod compiler;
-mod decoder;
 mod writer;
 
 use std::fs;
 use std::path::PathBuf;
 use writer::{NxsWriter, Schema, Slot};
 
-const SLOTS: &[&str] = &["id", "username", "email", "age", "balance", "active", "score", "created_at"];
-const S_ID: Slot         = Slot(0);
-const S_USERNAME: Slot   = Slot(1);
-const S_EMAIL: Slot      = Slot(2);
-const S_AGE: Slot        = Slot(3);
-const S_BALANCE: Slot    = Slot(4);
-const S_ACTIVE: Slot     = Slot(5);
-const S_SCORE: Slot      = Slot(6);
+const SLOTS: &[&str] = &[
+    "id",
+    "username",
+    "email",
+    "age",
+    "balance",
+    "active",
+    "score",
+    "created_at",
+];
+const S_ID: Slot = Slot(0);
+const S_USERNAME: Slot = Slot(1);
+const S_EMAIL: Slot = Slot(2);
+const S_AGE: Slot = Slot(3);
+const S_BALANCE: Slot = Slot(4);
+const S_ACTIVE: Slot = Slot(5);
+const S_SCORE: Slot = Slot(6);
 const S_CREATED_AT: Slot = Slot(7);
 
 struct Rec {
@@ -32,15 +41,17 @@ struct Rec {
 }
 
 fn build(n: usize) -> Vec<Rec> {
-    (0..n).map(|i| Rec {
-        id: i as i64,
-        username: format!("user_{i:07}"),
-        email: format!("user{i}@example.com"),
-        age: 20 + (i % 50) as i64,
-        balance: 100.0 + (i as f64) * 1.37,
-        active: i % 3 != 0,
-        score: (i as f64 % 100.0) / 10.0,
-    }).collect()
+    (0..n)
+        .map(|i| Rec {
+            id: i as i64,
+            username: format!("user_{i:07}"),
+            email: format!("user{i}@example.com"),
+            age: 20 + (i % 50) as i64,
+            balance: 100.0 + (i as f64) * 1.37,
+            active: i % 3 != 0,
+            score: (i as f64 % 100.0) / 10.0,
+        })
+        .collect()
 }
 
 fn write_nxb(records: &[Rec], path: &PathBuf) {
@@ -48,13 +59,13 @@ fn write_nxb(records: &[Rec], path: &PathBuf) {
     let mut w = NxsWriter::with_capacity(&schema, records.len() * 128 + 1024);
     for r in records {
         w.begin_object();
-        w.write_i64 (S_ID,         r.id);
-        w.write_str (S_USERNAME,   &r.username);
-        w.write_str (S_EMAIL,      &r.email);
-        w.write_i64 (S_AGE,        r.age);
-        w.write_f64 (S_BALANCE,    r.balance);
-        w.write_bool(S_ACTIVE,     r.active);
-        w.write_f64 (S_SCORE,      r.score);
+        w.write_i64(S_ID, r.id);
+        w.write_str(S_USERNAME, &r.username);
+        w.write_str(S_EMAIL, &r.email);
+        w.write_i64(S_AGE, r.age);
+        w.write_f64(S_BALANCE, r.balance);
+        w.write_bool(S_ACTIVE, r.active);
+        w.write_f64(S_SCORE, r.score);
         w.write_time(S_CREATED_AT, 1_777_593_600_000_000_000);
         w.end_object();
     }
@@ -67,7 +78,9 @@ fn write_json(records: &[Rec], path: &PathBuf) {
     let mut s = String::with_capacity(records.len() * 180);
     s.push('[');
     for (i, r) in records.iter().enumerate() {
-        if i > 0 { s.push(','); }
+        if i > 0 {
+            s.push(',');
+        }
         s.push_str(&format!(
             "{{\"id\":{},\"username\":\"{}\",\"email\":\"{}\",\"age\":{},\"balance\":{:.2},\"active\":{},\"score\":{:.1},\"created_at\":\"2026-04-30\"}}",
             r.id, r.username, r.email, r.age, r.balance, r.active, r.score
@@ -102,7 +115,10 @@ fn main() {
     fs::create_dir_all(&out_dir).expect("mkdir");
 
     let sizes: Vec<usize> = if args.len() > 2 {
-        args[2..].iter().map(|s| s.parse().expect("bad size")).collect()
+        args[2..]
+            .iter()
+            .map(|s| s.parse().expect("bad size"))
+            .collect()
     } else {
         vec![1_000, 10_000, 100_000, 1_000_000]
     };

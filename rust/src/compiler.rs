@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use crate::error::{NxsError, Result};
 use crate::parser::{Field, Value};
+use std::collections::HashMap;
 
 // Magic constants from spec
 const MAGIC_FILE: u32 = 0x4E585342; // NXSB
-const MAGIC_OBJ: u32 = 0x4E58534F;  // NXSO
+const MAGIC_OBJ: u32 = 0x4E58534F; // NXSO
 const MAGIC_LIST: u32 = 0x4E58534C; // NXSL
 const MAGIC_FOOTER: u32 = 0x2153584E; // NXS!
 const VERSION: u16 = 0x0100;
@@ -28,7 +28,10 @@ pub struct Compiler {
 
 impl Compiler {
     pub fn new() -> Self {
-        Compiler { dict: Vec::new(), key_map: HashMap::new() }
+        Compiler {
+            dict: Vec::new(),
+            key_map: HashMap::new(),
+        }
     }
 
     // First pass: collect all unique keys into the global dictionary
@@ -43,7 +46,9 @@ impl Compiler {
         match value {
             Value::Object(fields) => self.collect_keys(fields),
             Value::List(elems) => {
-                for e in elems { self.collect_keys_from_value(e); }
+                for e in elems {
+                    self.collect_keys_from_value(e);
+                }
             }
             _ => {}
         }
@@ -85,12 +90,12 @@ impl Compiler {
 
     fn encode_preamble(&self, dict_hash: u64, tail_ptr: u64, flags: u16) -> Vec<u8> {
         let mut b = Vec::with_capacity(32);
-        b.extend_from_slice(&MAGIC_FILE.to_le_bytes());   // 0..4
-        b.extend_from_slice(&VERSION.to_le_bytes());       // 4..6
-        b.extend_from_slice(&flags.to_le_bytes());         // 6..8
-        b.extend_from_slice(&dict_hash.to_le_bytes());     // 8..16
-        b.extend_from_slice(&tail_ptr.to_le_bytes());      // 16..24
-        b.extend_from_slice(&0u64.to_le_bytes());          // 24..32 reserved
+        b.extend_from_slice(&MAGIC_FILE.to_le_bytes()); // 0..4
+        b.extend_from_slice(&VERSION.to_le_bytes()); // 4..6
+        b.extend_from_slice(&flags.to_le_bytes()); // 6..8
+        b.extend_from_slice(&dict_hash.to_le_bytes()); // 8..16
+        b.extend_from_slice(&tail_ptr.to_le_bytes()); // 16..24
+        b.extend_from_slice(&0u64.to_le_bytes()); // 24..32 reserved
         b
     }
 
@@ -112,15 +117,20 @@ impl Compiler {
         }
 
         // Pad to 8-byte boundary
-        while b.len() % 8 != 0 { b.push(0x00); }
+        while b.len() % 8 != 0 {
+            b.push(0x00);
+        }
         b
     }
 
     fn encode_object(&self, fields: &[Field]) -> Result<Vec<u8>> {
         // Resolve macro fields first
-        let resolved: Vec<(usize, Value)> = fields.iter()
+        let resolved: Vec<(usize, Value)> = fields
+            .iter()
             .map(|f| {
-                let idx = *self.key_map.get(&f.key)
+                let idx = *self
+                    .key_map
+                    .get(&f.key)
                     .ok_or_else(|| NxsError::ParseError(format!("key not in dict: {}", f.key)))?;
                 let v = resolve_macro(&f.value, fields)?;
                 Ok((idx, v))
@@ -128,7 +138,10 @@ impl Compiler {
             .collect::<Result<Vec<_>>>()?;
 
         // Build bitmask
-        let mask = build_bitmask(&resolved.iter().map(|(i, _)| *i).collect::<Vec<_>>(), self.dict.len());
+        let mask = build_bitmask(
+            &resolved.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+            self.dict.len(),
+        );
 
         // Encode each value
         let mut value_bufs: Vec<Vec<u8>> = Vec::new();
@@ -163,7 +176,9 @@ impl Compiler {
         for off in &offsets {
             obj.extend_from_slice(&off.to_le_bytes());
         }
-        for _ in 0..align_padding { obj.push(0x00); }
+        for _ in 0..align_padding {
+            obj.push(0x00);
+        }
         for buf in &value_bufs {
             obj.extend_from_slice(buf);
         }
@@ -255,11 +270,19 @@ fn encode_value(v: &Value) -> Result<Vec<u8>> {
             inner.collect_keys(fields);
             // Copy parent dict entries
             inner.dict = fields.iter().map(|f| f.key.clone()).collect();
-            inner.key_map = inner.dict.iter().cloned().enumerate().map(|(i,k)| (k,i)).collect();
+            inner.key_map = inner
+                .dict
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(i, k)| (k, i))
+                .collect();
             inner.encode_object(fields)
         }
         Value::List(elems) => encode_list(elems),
-        Value::Macro(_) => Err(NxsError::MacroUnresolved("unresolved macro in encode".into())),
+        Value::Macro(_) => Err(NxsError::MacroUnresolved(
+            "unresolved macro in encode".into(),
+        )),
     }
 }
 
@@ -267,16 +290,17 @@ fn encode_list(elems: &[Value]) -> Result<Vec<u8>> {
     if elems.is_empty() {
         let mut b = Vec::new();
         b.extend_from_slice(&MAGIC_LIST.to_le_bytes()); // 4
-        b.extend_from_slice(&16u32.to_le_bytes());       // length=16
-        b.push(0x00);                                     // sigil (none)
-        b.extend_from_slice(&0u32.to_le_bytes());         // ElemCount
-        b.extend_from_slice(&[0u8; 3]);                   // padding
+        b.extend_from_slice(&16u32.to_le_bytes()); // length=16
+        b.push(0x00); // sigil (none)
+        b.extend_from_slice(&0u32.to_le_bytes()); // ElemCount
+        b.extend_from_slice(&[0u8; 3]); // padding
         return Ok(b);
     }
 
     let sigil_byte = value_sigil_byte(elems.first().unwrap());
 
-    let mut elem_bufs: Vec<Vec<u8>> = elems.iter()
+    let mut elem_bufs: Vec<Vec<u8>> = elems
+        .iter()
         .map(|e| {
             if value_sigil_byte(e) != sigil_byte {
                 return Err(NxsError::ListTypeMismatch);
@@ -319,7 +343,9 @@ fn value_sigil_byte(v: &Value) -> u8 {
 }
 
 fn pad_to_8(b: &mut Vec<u8>) {
-    while b.len() % 8 != 0 { b.push(0x00); }
+    while b.len() % 8 != 0 {
+        b.push(0x00);
+    }
 }
 
 fn align8(n: usize) -> usize {
@@ -328,22 +354,30 @@ fn align8(n: usize) -> usize {
 
 // Build LEB128 continuation-bit bitmask encoding the presence of given key indices
 fn build_bitmask(present_indices: &[usize], total_keys: usize) -> Vec<u8> {
-    if total_keys == 0 { return vec![0x00]; }
+    if total_keys == 0 {
+        return vec![0x00];
+    }
     let mut bits = vec![false; total_keys];
     for &idx in present_indices {
-        if idx < total_keys { bits[idx] = true; }
+        if idx < total_keys {
+            bits[idx] = true;
+        }
     }
     // Encode in groups of 7 bits with LEB128 continuation
     let mut result = Vec::new();
     let mut i = 0;
     while i < bits.len() {
-        let chunk: Vec<bool> = bits[i..bits.len().min(i+7)].to_vec();
+        let chunk: Vec<bool> = bits[i..bits.len().min(i + 7)].to_vec();
         let mut byte: u8 = 0;
         for (bit_pos, &set) in chunk.iter().enumerate() {
-            if set { byte |= 1 << bit_pos; }
+            if set {
+                byte |= 1 << bit_pos;
+            }
         }
         let has_more = i + 7 < bits.len();
-        if has_more { byte |= 0x80; }
+        if has_more {
+            byte |= 0x80;
+        }
         result.push(byte);
         i += 7;
     }
@@ -363,7 +397,8 @@ fn eval_macro(expr: &str, scope: &[Field]) -> Result<Value> {
 
     // @key reference
     if let Some(key) = expr.strip_prefix('@') {
-        return scope.iter()
+        return scope
+            .iter()
             .find(|f| f.key == key)
             .map(|f| f.value.clone())
             .ok_or_else(|| NxsError::MacroUnresolved(format!("@{key} not found in scope")));
@@ -377,7 +412,7 @@ fn eval_macro(expr: &str, scope: &[Field]) -> Result<Value> {
 
     // String/int literal passthrough
     if expr.starts_with('"') && expr.ends_with('"') {
-        let inner = &expr[1..expr.len()-1];
+        let inner = &expr[1..expr.len() - 1];
         return Ok(Value::Str(inner.to_string()));
     }
     if let Ok(n) = expr.parse::<i64>() {
@@ -394,15 +429,19 @@ fn eval_macro(expr: &str, scope: &[Field]) -> Result<Value> {
         let right = eval_macro(parts[1].trim(), scope)?;
         return match (left, right) {
             (Value::Str(a), Value::Str(b)) => Ok(Value::Str(a + &b)),
-            (Value::Int(a), Value::Int(b)) => a.checked_add(b)
-                .map(Value::Int)
-                .ok_or(NxsError::Overflow),
+            (Value::Int(a), Value::Int(b)) => {
+                a.checked_add(b).map(Value::Int).ok_or(NxsError::Overflow)
+            }
             (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
-            _ => Err(NxsError::MacroUnresolved(format!("incompatible types in +: {expr}"))),
+            _ => Err(NxsError::MacroUnresolved(format!(
+                "incompatible types in +: {expr}"
+            ))),
         };
     }
 
-    Err(NxsError::MacroUnresolved(format!("cannot evaluate: {expr}")))
+    Err(NxsError::MacroUnresolved(format!(
+        "cannot evaluate: {expr}"
+    )))
 }
 
 // MurmurHash3 64-bit (simplified finalizer-based version for POC)

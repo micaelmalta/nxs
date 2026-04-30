@@ -3,9 +3,9 @@ package nxs
 import (
 	"encoding/json"
 	"math"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -38,7 +38,7 @@ func loadFixtures(t *testing.T, n int) ([]byte, []record) {
 	return nxb, recs
 }
 
-func fmtRecordsNxb(n int) string { return "records_" + itoa(n) + ".nxb" }
+func fmtRecordsNxb(n int) string  { return "records_" + itoa(n) + ".nxb" }
 func fmtRecordsJson(n int) string { return "records_" + itoa(n) + ".json" }
 
 func itoa(n int) string {
@@ -292,8 +292,12 @@ func TestWriterNullField(t *testing.T) {
 func TestWriterBoolField(t *testing.T) {
 	schema := NewSchema([]string{"flag"})
 	w := NewWriter(schema)
-	w.BeginObject(); w.WriteBool(0, true);  w.EndObject()
-	w.BeginObject(); w.WriteBool(0, false); w.EndObject()
+	w.BeginObject()
+	w.WriteBool(0, true)
+	w.EndObject()
+	w.BeginObject()
+	w.WriteBool(0, false)
+	w.EndObject()
 	r, err := NewReader(w.Finish())
 	if err != nil {
 		t.Fatal(err)
@@ -479,11 +483,15 @@ func TestMinMaxF64Fast(t *testing.T) {
 func TestFieldIndexMatchesFast(t *testing.T) {
 	nxb, _ := loadFixtures(t, 1000)
 	r, err := NewReader(nxb)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	fast := r.SumF64Fast("score")
 	idx, ok := r.BuildFieldIndex("score")
-	if !ok { t.Fatal("BuildFieldIndex failed") }
+	if !ok {
+		t.Fatal("BuildFieldIndex failed")
+	}
 	indexed := r.SumF64Indexed(idx)
 	if !closeEnough(fast, indexed) {
 		t.Errorf("SumF64Indexed=%v SumF64Fast=%v", indexed, fast)
@@ -493,6 +501,10 @@ func TestFieldIndexMatchesFast(t *testing.T) {
 	mx, _ := r.MaxF64Indexed(idx)
 	mnFast, _ := r.MinF64Fast("score")
 	mxFast, _ := r.MaxF64Fast("score")
-	if !closeEnough(mn, mnFast) { t.Errorf("min mismatch") }
-	if !closeEnough(mx, mxFast) { t.Errorf("max mismatch") }
+	if !closeEnough(mn, mnFast) {
+		t.Errorf("min mismatch")
+	}
+	if !closeEnough(mx, mxFast) {
+		t.Errorf("max mismatch")
+	}
 }
