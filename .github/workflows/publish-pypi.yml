@@ -2,8 +2,9 @@ name: Publish PyPI
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'python/v*'
 
 jobs:
   build-and-publish:

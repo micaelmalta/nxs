@@ -2,8 +2,9 @@ name: Publish RubyGems
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'ruby/v*'
 
 jobs:
   publish:

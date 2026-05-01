@@ -2,8 +2,9 @@ name: Publish Kotlin (Maven Central)
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'kotlin/v*'
 
 jobs:
   publish:

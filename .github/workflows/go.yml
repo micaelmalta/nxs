@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['go/**', 'Makefile', '.github/workflows/go.yml']
+    tags:
+      - 'go/v*'
   pull_request:
     paths: ['go/**', 'Makefile', '.github/workflows/go.yml']
 

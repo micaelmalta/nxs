@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['ruby/**', 'Makefile', '.github/workflows/ruby.yml']
+    tags:
+      - 'ruby/v*'
   pull_request:
     paths: ['ruby/**', 'Makefile', '.github/workflows/ruby.yml']
 

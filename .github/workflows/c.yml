@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['c/**', 'Makefile', '.github/workflows/c.yml']
+    tags:
+      - 'c/v*'
   pull_request:
     paths: ['c/**', 'Makefile', '.github/workflows/c.yml']
 

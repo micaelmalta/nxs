@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['kotlin/**', 'Makefile', '.github/workflows/kotlin.yml']
+    tags:
+      - 'kotlin/v*'
   pull_request:
     paths: ['kotlin/**', 'Makefile', '.github/workflows/kotlin.yml']
 

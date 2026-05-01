@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['rust/**', 'examples/**', 'conformance/**', 'Makefile', '.github/workflows/rust.yml']
+    tags:
+      - 'rust/v*'
   pull_request:
     paths: ['rust/**', 'examples/**', 'conformance/**', 'Makefile', '.github/workflows/rust.yml']
 
