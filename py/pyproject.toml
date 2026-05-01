@@ -34,4 +34,5 @@ Documentation = "https://github.com/micaelmalta/nexus-standard/blob/main/SPEC.md
 py-modules = ["nxs", "nxs_writer"]
 
 [tool.setuptools.package-data]
-"" = ["*.pyi"]
+# Keys must be package/module names or "*"; empty string is invalid (setuptools validation).
+"*" = ["*.pyi"]
