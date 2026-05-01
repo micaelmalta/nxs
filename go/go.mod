@@ -1,3 +1,3 @@
-module github.com/micaelmalta/nxs/go
+module github.com/micaelmalta/nexus-standard/go
 
 go 1.23

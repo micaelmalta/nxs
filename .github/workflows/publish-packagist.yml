@@ -35,5 +35,5 @@ jobs:
         run: |
           curl -s -X POST \
             -H "Content-Type: application/json" \
-            -d '{"repository": {"url": "https://github.com/micaelmalta/nxs"}}' \
+            -d '{"repository": {"url": "https://github.com/micaelmalta/nexus-standard"}}' \
             "https://packagist.org/api/update-package?username=micaelmalta&apiToken=${{ secrets.PACKAGIST_API_TOKEN }}"

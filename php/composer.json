@@ -25,9 +25,9 @@
         ]
     },
     "keywords": ["nxs", "binary", "serialization", "zero-copy", "nexus-standard"],
-    "homepage": "https://github.com/micaelmalta/nxs",
+    "homepage": "https://github.com/micaelmalta/nexus-standard",
     "support": {
-        "source": "https://github.com/micaelmalta/nxs",
-        "issues": "https://github.com/micaelmalta/nxs/issues"
+        "source": "https://github.com/micaelmalta/nexus-standard",
+        "issues": "https://github.com/micaelmalta/nexus-standard/issues"
     }
 }

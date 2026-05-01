@@ -25,9 +25,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/micaelmalta/nxs"
-Repository = "https://github.com/micaelmalta/nxs"
-Documentation = "https://github.com/micaelmalta/nxs/blob/main/SPEC.md"
+Homepage = "https://github.com/micaelmalta/nexus-standard"
+Repository = "https://github.com/micaelmalta/nexus-standard"
+Documentation = "https://github.com/micaelmalta/nexus-standard/blob/main/SPEC.md"
 
 [tool.setuptools.packages.find]
 where = ["."]

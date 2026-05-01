@@ -13,11 +13,11 @@ Install from your language's package registry — no build tools required for th
 | Rust | crates.io | `cargo add nexus-standard` |
 | JavaScript | npm | `npm install @micaelmalta/nexus-standard` |
 | Python | PyPI | `pip install nexus-standard` |
-| Go | pkg.go.dev | `go get github.com/micaelmalta/nxs/go` |
+| Go | pkg.go.dev | `go get github.com/micaelmalta/nexus-standard/go` |
 | Ruby | RubyGems | `gem install nexus-standard` |
 | PHP | Packagist | `composer require micaelmalta/nexus-standard` |
 | C | GitHub Releases | Download `nxs-c-1.0.0.tar.gz` and include `nxs.h` + `nxs.c` |
-| Swift | Swift Package Index | `.package(url: "https://github.com/micaelmalta/nxs", from: "1.0.0")` |
+| Swift | Swift Package Index | `.package(url: "https://github.com/micaelmalta/nexus-standard", from: "1.0.0")` |
 | Kotlin | Maven Central | `implementation("io.github.micaelmalta:nexus-standard:1.0.0")` |
 | C# | NuGet | `dotnet add package nexus-standard` |
 
@@ -347,7 +347,7 @@ python bench_c.py           # C extension vs json
 ### Write `.nxb` directly (slot-based hot path)
 
 ```go
-import "github.com/micaelmalta/nxs/go"
+import "github.com/micaelmalta/nexus-standard/go"
 
 // Precompile schema once — reuse across all writer instances.
 schema := nxs.NewSchema([]string{"id", "username", "score", "active"})
@@ -381,7 +381,7 @@ data := nxs.FromRecords(
 
 ```go
 import (
-    "github.com/micaelmalta/nxs/go"
+    "github.com/micaelmalta/nexus-standard/go"
     "os"
 )
 
