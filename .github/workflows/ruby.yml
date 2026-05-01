@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['ruby/**', 'Makefile', '.github/workflows/ruby.yml']
     tags:
-      - 'ruby/v*'
+      - 'ruby/**'
   pull_request:
     paths: ['ruby/**', 'Makefile', '.github/workflows/ruby.yml']
 

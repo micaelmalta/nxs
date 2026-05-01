@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['c/**', 'Makefile', '.github/workflows/c.yml']
     tags:
-      - 'c/v*'
+      - 'c/**'
   pull_request:
     paths: ['c/**', 'Makefile', '.github/workflows/c.yml']
 

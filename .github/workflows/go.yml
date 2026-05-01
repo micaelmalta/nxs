@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['go/**', 'Makefile', '.github/workflows/go.yml']
     tags:
-      - 'go/v*'
+      - 'go/**'
   pull_request:
     paths: ['go/**', 'Makefile', '.github/workflows/go.yml']
 

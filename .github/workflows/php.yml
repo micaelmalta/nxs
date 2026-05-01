@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['php/**', 'Makefile', '.github/workflows/php.yml']
     tags:
-      - 'php/v*'
+      - 'php/**'
   pull_request:
     paths: ['php/**', 'Makefile', '.github/workflows/php.yml']
 

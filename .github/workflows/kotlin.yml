@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['kotlin/**', 'Makefile', '.github/workflows/kotlin.yml']
     tags:
-      - 'kotlin/v*'
+      - 'kotlin/**'
   pull_request:
     paths: ['kotlin/**', 'Makefile', '.github/workflows/kotlin.yml']
 

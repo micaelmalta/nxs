@@ -1,6 +1,6 @@
 # Release tag prefixes
 
-Registry publish workflows and matching CI jobs run when you push an annotated or lightweight tag whose name matches the pattern below. Each ecosystem is independent (no single repo-wide `v*` release trigger).
+Registry publish workflows and matching CI jobs run when you push an annotated or lightweight tag whose name matches the pattern below. Each ecosystem is independent (no single repo-wide `v*` release trigger). In GitHub Actions, `on.push.tags` uses glob rules where `*` does not cross `/`, so workflows use a prefix + `**` (for example `rust/**`) instead of `rust/v*` so tags like `rust/v1.0.0` match reliably.
 
 | Prefix      | Example      | Publish workflow (if any)   |
 |------------|--------------|-----------------------------|
@@ -17,4 +17,4 @@ Registry publish workflows and matching CI jobs run when you push an annotated o
 
 All of these workflows also support **`workflow_dispatch`** for manual runs.
 
-**Go:** The Go toolchain’s module proxy expects semver tags that match your module layout (often plain `vX.Y.Z` at the module root). The `go/v*` tag here is for CI (and any future automation you add); it does not replace whatever tags you use for `go get` if those differ.
+**Go:** The Go toolchain’s module proxy expects semver tags that match your module layout (often plain `vX.Y.Z` at the module root). The `go/v…` tags here are for CI (and any future automation you add); they do not replace whatever tags you use for `go get` if those differ.

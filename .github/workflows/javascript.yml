@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['js/**', 'Makefile', '.github/workflows/javascript.yml']
     tags:
-      - 'js/v*'
+      - 'js/**'
   pull_request:
     paths: ['js/**', 'Makefile', '.github/workflows/javascript.yml']
 
