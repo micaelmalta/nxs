@@ -100,11 +100,12 @@ fun main(args: Array<String>) {
     run {
         val schema = NxsSchema(listOf("id", "username", "score", "active"))
         val w = NxsWriter(schema)
-        val recs = listOf(
-            Triple(Triple(1L, "alice", 9.5), true, Unit),
-            Triple(Triple(2L, "bob", 7.2), false, Unit),
-            Triple(Triple(3L, "carol", 8.8), true, Unit),
-        )
+        val recs =
+            listOf(
+                Triple(Triple(1L, "alice", 9.5), true, Unit),
+                Triple(Triple(2L, "bob", 7.2), false, Unit),
+                Triple(Triple(3L, "carol", 8.8), true, Unit),
+            )
         for ((kv, active, _) in recs) {
             val (id, name, score) = kv
             w.beginObject()
@@ -125,13 +126,14 @@ fun main(args: Array<String>) {
 
     // fromRecords convenience
     run {
-        val bytes2 = NxsWriter.fromRecords(
-            listOf("id", "name", "value"),
-            listOf(
-                mapOf("id" to 10L, "name" to "foo", "value" to 1.5),
-                mapOf("id" to 20L, "name" to "bar", "value" to 2.5),
-            ),
-        )
+        val bytes2 =
+            NxsWriter.fromRecords(
+                listOf("id", "name", "value"),
+                listOf(
+                    mapOf("id" to 10L, "name" to "foo", "value" to 1.5),
+                    mapOf("id" to 20L, "name" to "bar", "value" to 2.5),
+                ),
+            )
         val rt2 = NxsReader(bytes2)
         check("writer fromRecords: record count", rt2.recordCount == 2)
         check("writer fromRecords: record(1) name", rt2.record(1).getStr("name") == "bar")
