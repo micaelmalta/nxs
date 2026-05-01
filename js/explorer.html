@@ -323,10 +323,10 @@
         <p>10M-line viewer — virtual scroll, in-place search, zero-copy parsing</p>
       </div>
       <div class="hint" id="drop-hint">
-        Drop a <code>.nxb</code> file here, <label for="file" class="upload-label">browse</label>, or
+        Drop <code>.nxb</code> or <code>.json</code> here, <label for="file" class="upload-label">browse</label>, or
       </div>
       <button type="button" id="pick">Choose file</button>
-      <input type="file" id="file" accept=".nxb,.NXB,application/octet-stream" hidden>
+      <input type="file" id="file" accept=".nxb,.NXB,.json,.JSON,application/json,application/octet-stream" hidden>
       <div class="file-info" id="file-info"></div>
     </div>
   </header>
@@ -404,9 +404,10 @@ const fmtBytes = n =>
                   `${(n/1073741824).toFixed(2)} GB`;
 
 // ── State ─────────────────────────────────────────────────────────────────
-let reader = null;          // NxsReader
+let reader = null;          // NxsReader (binary mode)
 let cursor = null;          // reusable cursor for render
 let slots = null;           // { id, username, email, created_at, score, active }
+let jsonRecords = null;     // null = .nxb mode; else Array<{id,username,email,tsDay,score,active}>
 let recordCount = 0;
 let rawBuffer = null;       // underlying ArrayBuffer (to send to worker)
 let _lastLoadedUrl = null;  // set when loading from a known URL; null for drag-and-drop
@@ -423,15 +424,107 @@ let currentMatches = null;  // Int32Array of matched record indices
 let currentMatchIdx = -1;
 let searchToken = 0;
 
-// Worker for search (only used when recordCount > 500k).
+// Worker for search over .nxb (not used for JSON uploads).
 let worker = null;
+
+function teardownExplorerWorker() {
+  if (worker) {
+    worker.removeEventListener("message", onWorkerMessage);
+    worker.terminate();
+    worker = null;
+  }
+}
+
+function jsonCreatedAtToDay(obj) {
+  const v =
+    obj.created_at ??
+    obj.createdAt ??
+    obj.date ??
+    obj.timestamp ??
+    obj.time;
+  if (v === undefined || v === null) return "";
+  if (typeof v === "number") {
+    const ms = v > 1e14 ? Math.round(v / 1_000_000) : v < 1e11 ? v * 1000 : v;
+    const d = new Date(ms);
+    return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) : "";
+  }
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : "";
+}
+
+/** Accepts gen_fixtures-style rows or any array of objects with overlapping keys. */
+function jsonToExplorerRows(parsed) {
+  let arr;
+  if (Array.isArray(parsed)) arr = parsed;
+  else if (parsed && typeof parsed === "object" && Array.isArray(parsed.records)) arr = parsed.records;
+  else {
+    throw new Error("JSON must be an array of objects or { \"records\": [...] }");
+  }
+  const out = new Array(arr.length);
+  for (let idx = 0; idx < arr.length; idx++) {
+    const o = arr[idx];
+    const obj = o && typeof o === "object" ? o : {};
+    let id = obj.id ?? obj.ID;
+    if (typeof id !== "number" && typeof id !== "bigint") id = idx;
+    if (typeof id === "bigint") id = Number(id);
+    const username = String(obj.username ?? obj.user ?? obj.name ?? "");
+    const email = String(obj.email ?? obj.mail ?? "");
+    let score = obj.score;
+    if (typeof score !== "number" || Number.isNaN(score)) score = parseFloat(score);
+    if (Number.isNaN(score)) score = undefined;
+    const active =
+      typeof obj.active === "boolean"
+        ? obj.active
+        : obj.active === 1 || obj.active === "true" || String(obj.active).toLowerCase() === "1";
+    out[idx] = {
+      id,
+      username,
+      email,
+      tsDay: jsonCreatedAtToDay(obj),
+      score,
+      active,
+    };
+  }
+  return out;
+}
+
+function applyViewportLayout(name, sizeBytes, sourceLabel) {
+  const ideal = recordCount * ROW_HEIGHT;
+  if (ideal <= MAX_VIRTUAL_PX) {
+    virtualHeight = ideal;
+    scrollScale = 1;
+  } else {
+    virtualHeight = MAX_VIRTUAL_PX;
+    scrollScale = recordCount * ROW_HEIGHT / virtualHeight;
+  }
+  totalRowsVirtual = Math.floor(virtualHeight / ROW_HEIGHT);
+  spacerEl.style.height = `${virtualHeight}px`;
+
+  scrollEl.scrollTop = 0;
+  matchesSet.clear();
+  currentMatches = null;
+  currentMatchIdx = -1;
+  lastFirstVr = -1;
+  searchBadge.textContent = "";
+  searchBadge.className = "badge";
+  updateMatchesStatus();
+
+  const tag = sourceLabel ? `${escapeHtml(name)} <span style="color:var(--muted)">(${sourceLabel})</span>` : escapeHtml(name);
+  fileInfoEl.innerHTML = `<strong>${tag}</strong> — ${fmtBytes(sizeBytes)} — ${fmtInt(recordCount)} records`;
+  overlayEl.classList.add("hide");
+
+  ensureRowPool();
+  scheduleRender();
+}
 
 // ── Virtual scroller ─────────────────────────────────────────────────────
 //
 // Strategy: scrollEl has a fixed viewport height; spacerEl has a height of
-// recordCount * ROW_HEIGHT (capped at MAX_VIRTUAL_PX). On scroll we compute
-// firstIdx = scrollTop / ROW_HEIGHT and render a window of (viewport/row + buffer)
-// rows, absolute-positioned by `translateY(idx * ROW_HEIGHT)` inside spacer.
+// recordCount * ROW_HEIGHT (capped at MAX_VIRTUAL_PX). When capped, each
+// ROW_HEIGHT band maps to ~scrollScale records; we render one pool row per
+// virtual row vr at translateY(vr * ROW_HEIGHT) with record floor(vr * scrollScale).
 // The pool is sized once; only textContent changes per frame.
 
 function computePoolSize() {
@@ -466,20 +559,16 @@ function ensureRowPool() {
   }
 }
 
-// Map a physical scroll position (0..virtualHeight) to a record index.
-function scrollTopToRecordIdx(scrollTop) {
-  if (totalRowsVirtual <= 0) return 0;
-  const idx = Math.floor(scrollTop / ROW_HEIGHT * scrollScale);
-  return Math.max(0, Math.min(recordCount - 1, idx));
-}
-
 // Inverse: record index -> scroll position.
 function recordIdxToScrollTop(idx) {
   return Math.floor(idx / scrollScale) * ROW_HEIGHT;
 }
 
-// Track the currently-rendered record window. Reused across frames.
-let lastFirstIdx = -1;
+// Track the currently-rendered *virtual row* window (spacer slots). When
+// scrollScale > 1, consecutive record indices share one slot — we must index
+// by virtual row, not raw record index, or multiple pool rows get the same
+// translateY and stack (broken UI on 10M+ files).
+let lastFirstVr = -1;
 let lastWindowSize = 0;
 let frameAvgMs = 0;
 const matchesSet = new Set();  // O(1) lookup of record idx -> is-a-match
@@ -493,72 +582,78 @@ function scheduleRender() {
 
 function render() {
   rafPending = false;
-  if (!reader) return;
+  if (!reader && jsonRecords === null) return;
 
   const t0 = performance.now();
   const scrollTop = scrollEl.scrollTop;
-  // firstIdx is the record index at the top of the viewport.
-  const firstIdx = Math.max(0, scrollTopToRecordIdx(scrollTop) - BUFFER_ROWS);
+  // Index by virtual row (one spacer band per ROW_HEIGHT px). Each band shows
+  // the first record in that band: floor(vr * scrollScale).
+  const firstVr = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_ROWS);
   const poolSize = rowPool.length;
-  const maxIdx = Math.min(recordCount - 1, firstIdx + poolSize - 1);
+  const maxVr = totalRowsVirtual - 1;
+  const lastVr = Math.min(maxVr, firstVr + poolSize - 1);
+  const activeRows = firstVr > maxVr ? 0 : lastVr - firstVr + 1;
 
   // Fast path: nothing changed.
-  if (firstIdx === lastFirstIdx && lastWindowSize === (maxIdx - firstIdx + 1)) {
+  if (firstVr === lastFirstVr && lastWindowSize === activeRows) {
     return;
   }
-  lastFirstIdx = firstIdx;
-  lastWindowSize = maxIdx - firstIdx + 1;
+  lastFirstVr = firstVr;
+  lastWindowSize = activeRows;
 
   for (let i = 0; i < poolSize; i++) {
-    const idx = firstIdx + i;
+    const vr = firstVr + i;
     const row = rowPool[i];
-    if (idx > maxIdx) {
+    if (vr < 0 || vr > maxVr) {
       if (row.renderedIndex !== -1) {
         row.el.style.display = "none";
         row.renderedIndex = -1;
       }
       continue;
     }
+    const idx = Math.min(recordCount - 1, Math.floor(vr * scrollScale));
     row.el.style.display = "";
     row.renderedIndex = idx;
-    // Absolute position inside spacer — uses translateY so the paint path
-    // is cheap and the browser can promote to its own layer.
-    // We position by the *virtual* pixel (the capped one), so scrolling
-    // feels continuous even when scrollScale > 1.
-    const virtualTop = Math.floor(idx / scrollScale) * ROW_HEIGHT;
+    // One pool row per virtual band — never duplicate translateY.
+    const virtualTop = vr * ROW_HEIGHT;
     row.el.style.transform = `translateY(${virtualTop}px)`;
     renderRow(row, idx);
   }
 
   const elapsed = performance.now() - t0;
   frameAvgMs = frameAvgMs * 0.8 + elapsed * 0.2;
-  updateStatus(firstIdx);
+  updateStatus(scrollTop);
 }
 
 function renderRow(row, idx) {
-  // Reuse cursor — zero allocation per record.
-  cursor.seek(idx);
-  // id / line number
-  const id = cursor.getI64BySlot(slots.id);
-  row.lineno.textContent = (id !== undefined ? id : idx + 1).toString().padStart(9, " ");
-  // timestamp — stored as i64 Unix nanoseconds, not a string
-  const tsNs = cursor.getI64BySlot(slots.created_at);
-  row.ts.textContent = tsNs !== undefined
-    ? new Date(Math.round(tsNs / 1_000_000)).toISOString().slice(0, 10)
-    : "";
-  // component (username)
-  const uname = cursor.getStrBySlot(slots.username);
-  row.component.textContent = uname || "";
-  // message (email)
-  const mail = cursor.getStrBySlot(slots.email);
-  row.msg.textContent = mail || "";
-  // numeric (score)
-  const score = cursor.getF64BySlot(slots.score);
-  row.score.textContent = score !== undefined ? score.toFixed(2) : "";
-  // flag (active)
-  const active = cursor.getBoolBySlot(slots.active);
-  row.flag.textContent = active ? "●" : "○";
-  row.flag.className = active ? "flag on" : "flag";
+  if (jsonRecords !== null) {
+    const r = jsonRecords[idx];
+    row.lineno.textContent = String(r.id ?? idx + 1).padStart(9, " ");
+    row.ts.textContent = r.tsDay || "";
+    row.component.textContent = r.username || "";
+    row.msg.textContent = r.email || "";
+    row.score.textContent = r.score !== undefined ? r.score.toFixed(2) : "";
+    row.flag.textContent = r.active ? "●" : "○";
+    row.flag.className = r.active ? "flag on" : "flag";
+  } else {
+    // Reuse cursor — zero allocation per record.
+    cursor.seek(idx);
+    const id = cursor.getI64BySlot(slots.id);
+    row.lineno.textContent = (id !== undefined ? id : idx + 1).toString().padStart(9, " ");
+    const tsNs = cursor.getI64BySlot(slots.created_at);
+    row.ts.textContent = tsNs !== undefined
+      ? new Date(Math.round(tsNs / 1_000_000)).toISOString().slice(0, 10)
+      : "";
+    const uname = cursor.getStrBySlot(slots.username);
+    row.component.textContent = uname || "";
+    const mail = cursor.getStrBySlot(slots.email);
+    row.msg.textContent = mail || "";
+    const score = cursor.getF64BySlot(slots.score);
+    row.score.textContent = score !== undefined ? score.toFixed(2) : "";
+    const active = cursor.getBoolBySlot(slots.active);
+    row.flag.textContent = active ? "●" : "○";
+    row.flag.className = active ? "flag on" : "flag";
+  }
 
   // Match highlighting
   let cls = "row";
@@ -569,11 +664,14 @@ function renderRow(row, idx) {
   if (row.el.className !== cls) row.el.className = cls;
 }
 
-function updateStatus(firstIdx) {
-  // Show the line at the center of the viewport so the status reflects
-  // where the user is looking, not where the window begins.
+function updateStatus(scrollTop) {
+  // Center of viewport as a record index (works for scrollScale > 1).
   const viewportRows = Math.ceil(scrollEl.clientHeight / ROW_HEIGHT);
-  const centerIdx = Math.min(recordCount - 1, firstIdx + BUFFER_ROWS + (viewportRows >> 1));
+  const topVr = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT));
+  const centerVr =
+    totalRowsVirtual <= 0 ? 0 : Math.min(totalRowsVirtual - 1, topVr + (viewportRows >> 1));
+  const centerIdx =
+    recordCount <= 0 ? 0 : Math.min(recordCount - 1, Math.floor(centerVr * scrollScale));
   statusPos.innerHTML = `line <strong>${fmtInt(centerIdx + 1)}</strong> of <strong>${fmtInt(recordCount)}</strong>`;
   statusFrame.textContent = `render ${frameAvgMs.toFixed(1)} ms`;
   statusFrame.className = frameAvgMs < 4 ? "ok" : frameAvgMs < 10 ? "warn" : "bad";
@@ -581,6 +679,7 @@ function updateStatus(firstIdx) {
 
 // ── Loading ──────────────────────────────────────────────────────────────
 async function loadBuffer(buffer, name, sizeBytes) {
+  jsonRecords = null;
   // Validate magic.
   const dv = new DataView(buffer);
   if (dv.byteLength < 4 || dv.getUint32(0, true) !== NXS_MAGIC) {
@@ -609,33 +708,6 @@ async function loadBuffer(buffer, name, sizeBytes) {
     active: reader.slot("active"),
   };
 
-  // Compute virtual height & optional scale if recordCount × ROW_HEIGHT
-  // exceeds the browser's safe pixel ceiling.
-  const ideal = recordCount * ROW_HEIGHT;
-  if (ideal <= MAX_VIRTUAL_PX) {
-    virtualHeight = ideal;
-    scrollScale = 1;
-  } else {
-    virtualHeight = MAX_VIRTUAL_PX;
-    // records-per-virtual-row = recordCount / (virtualHeight / ROW_HEIGHT)
-    scrollScale = recordCount * ROW_HEIGHT / virtualHeight;
-  }
-  totalRowsVirtual = Math.floor(virtualHeight / ROW_HEIGHT);
-  spacerEl.style.height = `${virtualHeight}px`;
-
-  // Reset scroll state and UI.
-  scrollEl.scrollTop = 0;
-  matchesSet.clear();
-  currentMatches = null;
-  currentMatchIdx = -1;
-  lastFirstIdx = -1;
-  searchBadge.textContent = "";
-  searchBadge.className = "badge";
-  updateMatchesStatus();
-
-  fileInfoEl.innerHTML = `<strong>${escapeHtml(name)}</strong> — ${fmtBytes(sizeBytes)} — ${fmtInt(recordCount)} records`;
-  overlayEl.classList.add("hide");
-
   // Tell the worker to fetch the file itself — no buffer copy across the
   // postMessage boundary. If the name looks like a fixture path, derive a
   // relative URL the worker can fetch. For drag-and-dropped files the worker
@@ -645,17 +717,42 @@ async function loadBuffer(buffer, name, sizeBytes) {
   if (worker) {
     const fixtureUrl = _lastLoadedUrl;
     if (fixtureUrl) {
-      // Worker fetches independently — zero bytes copied from main thread.
       worker.postMessage({ type: "load-url", url: fixtureUrl });
     } else {
-      // Drag-and-drop: no URL available; transfer a copy (unavoidable).
       const copy = buffer.slice(0);
       worker.postMessage({ type: "load", buffer: copy }, [copy]);
     }
   }
 
-  ensureRowPool();
-  scheduleRender();
+  applyViewportLayout(name, sizeBytes);
+}
+
+async function loadJsonString(text, name, sizeBytes) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    showError(`Invalid JSON in ${name}: ${e.message}`);
+    return;
+  }
+
+  let rows;
+  try {
+    rows = jsonToExplorerRows(parsed);
+  } catch (e) {
+    showError(`${name}: ${e.message}`);
+    return;
+  }
+
+  teardownExplorerWorker();
+  reader = null;
+  cursor = null;
+  slots = null;
+  rawBuffer = null;
+  jsonRecords = rows;
+  recordCount = jsonRecords.length;
+  _lastLoadedUrl = null;
+  applyViewportLayout(name, sizeBytes, "JSON");
 }
 
 function ensureWorker() {
@@ -695,7 +792,7 @@ function onWorkerMessage(ev) {
       searchBadge.className = "badge";
     }
     updateMatchesStatus();
-    lastFirstIdx = -1;
+    lastFirstVr = -1;
     scheduleRender();
   }
 }
@@ -713,7 +810,7 @@ function searchMainThread(query) {
     searchBadge.textContent = "";
     searchBadge.className = "badge";
     updateMatchesStatus();
-    lastFirstIdx = -1;
+    lastFirstVr = -1;
     scheduleRender();
     return;
   }
@@ -724,13 +821,20 @@ function searchMainThread(query) {
   Promise.resolve().then(() => {
     if (token !== searchToken) return;
     const needle = query.toLowerCase();
-    const cur = reader.cursor();
-    const uSlot = slots.username;
     const results = [];
-    for (let i = 0; i < recordCount; i++) {
-      cur.seek(i);
-      const u = cur.getStrBySlot(uSlot);
-      if (u && u.toLowerCase().indexOf(needle) !== -1) results.push(i);
+    if (jsonRecords !== null) {
+      for (let i = 0; i < recordCount; i++) {
+        const u = jsonRecords[i].username;
+        if (u && String(u).toLowerCase().indexOf(needle) !== -1) results.push(i);
+      }
+    } else {
+      const cur = reader.cursor();
+      const uSlot = slots.username;
+      for (let i = 0; i < recordCount; i++) {
+        cur.seek(i);
+        const u = cur.getStrBySlot(uSlot);
+        if (u && u.toLowerCase().indexOf(needle) !== -1) results.push(i);
+      }
     }
     if (token !== searchToken) return;
     currentMatches = new Int32Array(results);
@@ -741,7 +845,7 @@ function searchMainThread(query) {
     searchBadge.className = results.length ? "badge active" : "badge";
     if (results.length) jumpToRecord(results[0]);
     updateMatchesStatus();
-    lastFirstIdx = -1;
+    lastFirstVr = -1;
     scheduleRender();
   });
 }
@@ -751,7 +855,7 @@ function startSearch(query) {
   // Clear old match state immediately so the UI feels responsive.
   matchesSet.clear();
   currentMatchIdx = -1;
-  lastFirstIdx = -1;
+  lastFirstVr = -1;
 
   if (!query) {
     searchToken++;  // cancel any in-flight
@@ -760,6 +864,11 @@ function startSearch(query) {
     searchBadge.className = "badge";
     updateMatchesStatus();
     scheduleRender();
+    return;
+  }
+
+  if (jsonRecords !== null) {
+    searchMainThread(query);
     return;
   }
 
@@ -787,7 +896,7 @@ function nextMatch(dir) {
   currentMatchIdx = (currentMatchIdx + dir + currentMatches.length) % currentMatches.length;
   jumpToRecord(currentMatches[currentMatchIdx]);
   updateMatchesStatus();
-  lastFirstIdx = -1;
+  lastFirstVr = -1;
   scheduleRender();
 }
 
@@ -803,7 +912,7 @@ function jumpToRecord(idx) {
 
 // ── Event wiring ─────────────────────────────────────────────────────────
 scrollEl.addEventListener("scroll", scheduleRender, { passive: true });
-window.addEventListener("resize", () => { ensureRowPool(); lastFirstIdx = -1; scheduleRender(); });
+window.addEventListener("resize", () => { ensureRowPool(); lastFirstVr = -1; scheduleRender(); });
 
 // Debounced search (100ms).
 let searchDebounce = null;
@@ -851,7 +960,7 @@ document.addEventListener("keydown", (e) => {
   }
   // Don't hijack keys while typing in an input.
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-  if (!reader) return;
+  if (!reader && jsonRecords === null) return;
 
   const viewportRows = Math.ceil(scrollEl.clientHeight / ROW_HEIGHT);
   const page = Math.max(1, viewportRows - 2);
@@ -890,13 +999,24 @@ fileInput.addEventListener("change", async (e) => {
   fileInput.value = "";
 });
 
+function fileLooksLikeJson(file) {
+  const n = (file.name || "").toLowerCase();
+  const t = (file.type || "").toLowerCase();
+  return n.endsWith(".json") || t === "application/json" || t === "text/json";
+}
+
 async function loadFile(file) {
   overlayEl.classList.remove("hide");
   overlayEl.textContent = `Loading ${file.name}…`;
   try {
     _lastLoadedUrl = null;  // drag-and-drop: no URL for worker to re-fetch
-    const buf = await file.arrayBuffer();
-    await loadBuffer(buf, file.name, file.size);
+    if (fileLooksLikeJson(file)) {
+      const text = await file.text();
+      await loadJsonString(text, file.name, file.size);
+    } else {
+      const buf = await file.arrayBuffer();
+      await loadBuffer(buf, file.name, file.size);
+    }
   } catch (e) {
     showError(`Failed to load ${file.name}: ${e.message}`);
   }
@@ -926,7 +1046,7 @@ const QUICK_SIZES = [
 overlayEl.innerHTML = `
   <div style="max-width:480px;text-align:center">
     <p style="margin:0 0 16px;font-size:15px;color:var(--muted)">
-      Drop a <code>.nxb</code> file, click <strong>Choose file</strong>,<br>
+      Drop <code>.nxb</code> / <code>.json</code>, click <strong>Choose file</strong>,<br>
       or load a built-in fixture:
     </p>
     <div style="display:flex;flex-direction:column;gap:8px">
