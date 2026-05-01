@@ -61,8 +61,6 @@ kotlin/build/
 # Editor / tooling
 .playwright-mcp/
 .ruby-lsp/
-docs/index/
-CLAUDE.md
 
 # C compiled binaries
 c/test
@@ -82,3 +80,6 @@ workers-*.png
 index-*.png
 bench-*.png
 ticker-*.png
+
+# Para-Programmatic Context
+.para-worktrees/
