@@ -8,7 +8,7 @@ Every time a service reads a million-row dataset, it pays the same toll: allocat
 
 JSON was designed to flow over HTTP between browsers and servers. It does that beautifully. It was not designed to be an in-memory query layer for 1.5 GB of records in a tab that needs to stay responsive at 60 frames per second. We are using a transit format as a storage format, and we are paying for it at runtime, constantly, in milliseconds that add up to seconds.
 
-CSV strips the types out entirely and calls it simplicity. Protocol Buffers puts the schema in a separate file, generates code you have to check in, and still doesn't give you random record access. FlatBuffers gets close — zero-copy within a single object — but a multi-record file has no cross-record index. You cannot jump to record 800,000 without reading the 799,999 before it.
+CSV strips the types out entirely and calls it simplicity. Protocol Buffers puts the schema in a separate file, generates code you have to check in, and still doesn't give you random record access. FlatBuffers gets close — zero-copy within a single object — but the format does not define a cross-record index. Without one, a multi-record file has no standard path to record 800,000 that doesn't involve reading what came before it.
 
 None of them were wrong. They solved the problem they were aimed at. NXS is aimed at a different problem.
 
@@ -18,7 +18,7 @@ None of them were wrong. They solved the problem they were aimed at. NXS is aime
 
 A format that a human can write, read in a diff, and commit to version control — without ceremony, without schema registries, without generated code.
 
-A format that a machine can open in microseconds, regardless of how many records it contains.
+A format whose open cost is constant with respect to how many records it contains — touching only the preamble and tail-index on open, not the data sector.
 
 A format where reading one field from record 800,000 does not require loading records 1 through 799,999.
 
@@ -46,7 +46,7 @@ user {
 }
 ```
 
-The Rust compiler reads this text and writes a `.nxb` file. That file is what all ten language implementations consume. It is not compiled once and read once. It is compiled once and read arbitrarily, in O(1) per record, across whatever languages your stack happens to use.
+The Rust compiler reads this text and writes a `.nxb` file. That file is what all ten language implementations consume. It is not compiled once and read once. It is compiled once and read arbitrarily — O(log N) record lookup via the tail-index, O(1) field access once a record is located — across whatever languages your stack happens to use.
 
 ---
 
@@ -56,7 +56,7 @@ Three decisions make the binary format fast enough to matter.
 
 **8-byte alignment.** Every atomic value — integer, float, timestamp — sits at a file offset divisible by 8. A memory-mapped `.nxb` file can be cast directly to typed pointers without a copy-to-aligned-buffer step. The processor loads it natively. SIMD loops over lists need no realignment pass. Bool fields waste 7 bytes of padding. That is the honest cost of the guarantee, and it is worth it.
 
-**The Tail-Index.** The last 8 bytes of every `.nxb` file point to an index that holds one `(KeyID, AbsoluteOffset)` pair per top-level record. To open a file with 14 million records: seek to EOF minus 8, read the pointer, jump to the index, binary-search for your record, follow its absolute offset to the data. The rest of the file has not been touched. Open time is measured in nanoseconds, not milliseconds.
+**The Tail-Index.** The last 8 bytes of every `.nxb` file point to an index that holds one `(RecordIndex, AbsoluteOffset)` pair per top-level record. To open a file with 14 million records: seek to EOF minus 8, read the pointer, jump to the index, binary-search for your record, follow its absolute offset to the data. The rest of the file has not been touched. Open time is constant with respect to data sector size — it touches only the preamble and tail-index, regardless of how many records the file contains.
 
 **The LEB128 bitmask.** Each object header carries a variable-width presence mask. A set bit means the field is there; a clear bit means it was never written. Sparse objects carry no overhead for absent fields. When every record in a file shares the same schema — the common case — the bitmask and offset table are identical for every record after the first, and implementations can skip parsing them entirely.
 
@@ -84,6 +84,8 @@ NXS is not a replacement for JSON over HTTP. JSON is excellent there.
 
 NXS is not a database. It has no query planner, no indexing beyond the tail-index, no transaction model.
 
+NXS is not a columnar analytics engine. Apache Arrow and Parquet are better choices when your workload is full-column aggregates over millions of rows in a pipeline with a query planner. NXS is better when the unit of access is a record — configuration, event logs, entity stores — and when the environment can't absorb a runtime engine dependency.
+
 NXS v1.0 is complete. The spec is stable, the binary format is frozen, and all ten language implementations pass the conformance test suite. The design held up under real implementation pressure.
 
 ---
@@ -96,7 +98,7 @@ NXS v1.0 is complete. The spec is stable, the binary format is frozen, and all t
 
 **Absent and null are different.** A field with no bitmask bit is absent — it was never written. A field with a bitmask bit pointing to `0x00` is null — it was explicitly set to nothing. These have different semantics. Implementations that conflate them are wrong.
 
-**Alignment is not optional.** The Rule of 8 applies to every atomic value, in every file, with no exceptions. This is what makes zero-copy reads safe.
+**Alignment is not optional.** The Rule of 8 applies to every atomic value, in every file, with no exceptions. This is what makes zero-copy access to aligned atomic values safe.
 
 **Bounds checking is not optional.** Every offset from an offset table, the tail-index, or any in-file pointer must be validated before the memory access. An out-of-bounds offset is an error; a conformant parser does not attempt recovery.
 

@@ -6,13 +6,13 @@ This is the formal, exhaustive specification for the **Nexus Standard (NXS)**. T
 
 **Date:** April 30, 2026  
 **Status:** Stable (v1.0)  
-**Editors:** Gemini AI & Collaborator  
+**Editors:** Micael Malta  
 **MIME Types:** `application/nxb` (Binary), `application/nxs` (Text)
 
 ---
 
 ## 1. Abstract
-NXS is a high-performance, bi-modal data serialization format that prioritizes **CPU-native memory alignment** and **O(1) random access**. By utilizing a sigil-based type system in text and a bitmask-driven, zero-copy architecture in binary, NXS eliminates the "parsing tax" common in JSON and the "rigidity tax" common in Protobuf.
+NXS is a high-performance, bi-modal data serialization format that prioritizes **CPU-native memory alignment**, **O(log N) record lookup** via a tail-index, and **O(1) field access** within a located record. By utilizing a sigil-based type system in text and a bitmask-driven architecture in binary with zero-copy access for aligned atomic values, NXS eliminates the "parsing tax" common in JSON and the "rigidity tax" common in Protobuf.
 
 ## 2. Terminology
 The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHALL**, **SHALL NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED**, **MAY**, and **OPTIONAL** in this document are to be interpreted as described in **RFC 2119**.
@@ -83,7 +83,7 @@ Macros **MUST** be fully resolved at compile time. A Macro that cannot be static
 ---
 
 ## 4. The Binary Format (.nxb)
-The binary representation is designed for **Zero-Copy Memory Mapping**. All multi-byte integer fields use **Little-Endian** byte order unless otherwise noted.
+The binary representation is designed for memory mapping with **zero-copy access to aligned atomic values** (Int64, Float64, Time). Variable-length values (String, Binary) are length-prefixed; their payloads are not copied, but string interpretation (e.g. UTF-8 decoding) is a separate concern handled by the reader at materialization time. All multi-byte integer fields use **Little-Endian** byte order. NXS does not support Big-Endian byte order and provides no endianness negotiation mechanism. Readers on Big-Endian architectures MUST byte-swap multi-byte fields after reading.
 
 ### 4.1 Memory Alignment (The Rule of 8)
 All atomic values (Int64, Float64, Temporal) **MUST** start at a file offset that satisfies the following condition:
@@ -127,19 +127,20 @@ The `StringPool` **MUST** be padded to an 8-byte boundary after the last null te
 
 ### 4.3 Schema Evolution
 
-NXS uses an **additive-only** schema evolution model. Writers may add new fields to the schema at any time. Existing readers that were compiled against an older schema with fewer fields will continue to work correctly without modification.
+NXS uses an **additive-only** schema evolution model within a single file. Writers may add new fields to the schema, but **adding fields changes the DictHash** because the hash covers the full Schema Header. A file compiled with an extended schema is therefore a **new file** with a new DictHash; it is not a drop-in replacement for the original file.
 
-**How it works:**
+**Within-file semantics** (reader queries a field the file's schema does not know about):
 
-When a reader accesses a field by key name or slot index, it checks the per-object bitmask to determine whether that field is present. If the bit for a requested slot is `0` (absent) or the slot index is beyond the bitmask range, the reader MUST return the language-appropriate "absent" sentinel (e.g., `null`, `None`, `undefined`, `(zero, false)`) rather than raising an error.
+When a reader accesses a field by key name or slot index, it checks the per-object bitmask to determine whether that field is present. If the bit for a requested slot is `0` (absent) or the slot index is beyond the bitmask range, the reader MUST return the language-appropriate "absent" sentinel rather than raising an error.
 
 **Rules:**
-1. Writers MAY add new keys to the end of the schema. Existing slot indices are unchanged.
+1. Writers MAY add new keys to the end of the schema when producing a new file. Existing slot indices are unchanged in the new file.
 2. Writers MUST NOT reorder or remove keys from an existing schema.
 3. Readers MUST treat a missing bitmask bit (field not present in this record) as absent, not as an error.
-4. A file written with an N-field schema is readable by any reader that knows about slots `0` through `M` (M ≤ N); fields `M+1` through `N-1` will simply appear absent.
+4. A reader that knows about slots `0` through `M` can query any file whose schema has N ≥ M fields; fields beyond slot M will simply appear absent.
+5. A reader caching an external schema MUST verify `DictHash` before using that schema. A hash mismatch means the file was compiled from a different (or evolved) schema; the reader MUST fall back to the embedded Schema Header or fail with `ERR_DICT_MISMATCH`.
 
-**Example:** A file written with schema `["a", "b", "c"]` can be read by a reader that only queries `"a"` and `"b"`. Field `"c"` will be absent for that reader — no error is raised, and no schema version negotiation is required.
+**Example:** A file written with schema `["a", "b", "c"]` can be read by a reader that only queries `"a"` and `"b"`. Field `"c"` will be absent for that reader — no error is raised. A later file written with schema `["a", "b", "c", "d"]` has a different DictHash and is treated as a distinct file; cached schemas must not be applied to it without hash verification.
 
 ---
 
@@ -192,17 +193,23 @@ Immediately follows the header. Elements are laid out contiguously, each obeying
 
 ---
 
-## 7. The Tail-Index (O(1) Access)
-The Tail-Index is located at the end of the file at the offset given by `TailPtr` in the Preamble. It allows a reader to locate top-level records without a linear scan.
+## 7. The Tail-Index (O(log N) Record Lookup)
+The Tail-Index is located at the end of the file at the offset given by `TailPtr` in the Preamble. It allows a reader to locate any top-level record without scanning the Data Sector.
 
 | Field | Size | Description |
 | :--- | :--- | :--- |
 | `EntryCount` | 4 bytes | `uint32_t` total number of indexed records |
-| `RecordArray` | Variable | Pairs of `KeyID (u16)` and `AbsoluteOffset (u64)`, Little-Endian |
+| `RecordArray` | Variable | Pairs of `RecordIndex (u32)` and `AbsoluteOffset (u64)`, Little-Endian |
 | `FooterPtr` | 4 bytes | `uint32_t` offset back to the start of the Tail-Index |
 | `MagicFooter` | 4 bytes | `0x2153584E` (`NXS!`) |
 
 The final 8 bytes of the file are always `FooterPtr` + `MagicFooter`, allowing a reader to locate the Tail-Index by seeking to `EOF - 8`.
+
+**RecordIndex semantics.** Each `RecordIndex` is a zero-based, sequential integer representing the record's position in the file (0 = first record written). Values are unique within a file and carry no meaning outside it.
+
+**Ordering invariant.** The `RecordArray` **MUST** be written in ascending `RecordIndex` order, enabling O(log N) binary-search lookup. A non-ascending array is `ERR_MALFORMED_INDEX`.
+
+**Field access.** Once a record's `AbsoluteOffset` is resolved from the Tail-Index, individual field access via the object's Offset Table is O(1).
 
 ---
 
@@ -239,6 +246,7 @@ Circular links (a chain of `&` references that resolves back to its origin) **MU
 | `ERR_UNKNOWN_SIGIL` | Unrecognized sigil byte encountered |
 | `ERR_BAD_ESCAPE` | Invalid escape sequence in string literal |
 | `ERR_OUT_OF_BOUNDS` | Offset points outside the buffer |
+| `ERR_MALFORMED_INDEX` | Tail-Index `RecordArray` is not in ascending `RecordIndex` order |
 | `ERR_DICT_MISMATCH` | DictHash does not match and no embedded schema present |
 | `ERR_CIRCULAR_LINK` | Link chain resolves back to its origin |
 | `ERR_RECURSION_LIMIT` | Nesting depth exceeds conformance limit |
@@ -265,7 +273,7 @@ user {
 4. **Data Cell 0 (id):** `0x0000000000000400` (Int64 1024, LE).
 5. **Data Cell 1 (active):** `0x01` + 7 bytes `0x00` padding.
 6. **Data Cell 2 (name):** Length `0x00000004` + `Alex` + 4 bytes `0x00` padding.
-7. **Tail-Index:** EntryCount `0x00000001`, Record `[KeyID=0x0000, Offset=<object start>]`, FooterPtr, Magic `NXS!`.
+7. **Tail-Index:** EntryCount `0x00000001`, Record `[RecordIndex=0x00000000, Offset=<object start>]`, FooterPtr, Magic `NXS!`.
 
 ---
 

@@ -2,7 +2,7 @@
 RFC NXS-001
 Title: The Nexus Standard (NXS) Serialization Format
 Date: 2026-04-30
-Status: Experimental
+Status: Stable v1.0
 Editors: Micael Malta
 ```
 
@@ -11,7 +11,7 @@ Editors: Micael Malta
 # RFC NXS-001: The Nexus Standard (NXS) Serialization Format
 
 **Date:** 2026-04-30
-**Status:** Experimental
+**Status:** Stable v1.0
 **Editors:** Micael Malta
 **MIME Types:** `application/nxb` (binary), `application/nxs` (text source)
 **File Extensions:** `.nxb`, `.nxs`
@@ -44,7 +44,7 @@ Editors: Micael Malta
 
 The Nexus Standard (NXS) is a high-performance, bi-modal data serialization format designed for environments where parse latency, memory overhead, and random-access performance are first-class concerns. NXS exists in two complementary representations: a human-readable UTF-8 source format (`.nxs`) that is authored and reviewed by developers, and a compiled binary format (`.nxb`) that is consumed at runtime without full deserialization.
 
-NXS addresses a gap in the existing serialization landscape. Human-readable formats such as JSON impose an O(n) parsing tax before any data can be accessed and carry no mechanism for random record lookup. Schema-driven binary formats such as Protocol Buffers and FlatBuffers deliver excellent performance but require generated code, external schema registries, and non-trivial build tooling. NXS combines the authoring ergonomics of a text format with the runtime characteristics of a memory-mapped binary format: records are located in O(1) time via a Tail-Index, atomic values are zero-copy readable via 8-byte alignment, and the embedded schema header eliminates out-of-band schema management for most use cases.
+NXS addresses a gap in the existing serialization landscape. Human-readable formats such as JSON impose an O(n) parsing tax before any data can be accessed and carry no mechanism for random record lookup. Schema-driven binary formats such as Protocol Buffers and FlatBuffers deliver excellent performance but require generated code, external schema registries, and non-trivial build tooling. NXS combines the authoring ergonomics of a text format with the runtime characteristics of a memory-mapped binary format: records are located in O(log N) time via a Tail-Index binary search, individual fields within a located record are O(1) via the Offset Table, aligned atomic values support zero-copy access via 8-byte alignment, and the embedded schema header eliminates out-of-band schema management for most use cases.
 
 This document specifies the NXS source syntax, the `.nxb` binary wire format, the Tail-Index structure, the delta-patching protocol, and the security requirements that conformant implementations must satisfy. It also provides implementation guidance and a comparison with related serialization formats.
 
@@ -52,9 +52,11 @@ This document specifies the NXS source syntax, the `.nxb` binary wire format, th
 
 ## 2. Status of This Document
 
-This document defines an **Experimental** specification for the NXS format. It has not been subjected to independent interoperability testing and is not recommended for production use. The specification may change in incompatible ways before a stable release is issued.
+This document defines the **Stable v1.0** specification for the NXS format. The binary format is frozen: the preamble layout, schema header, object anatomy, list encoding, and tail-index structure are normative. Backwards-incompatible changes to these structures are prohibited. Any future revision that alters wire format will be designated v2.0 or later.
 
-Readers are encouraged to implement NXS against this document and to report ambiguities, inconsistencies, or implementation difficulties. Feedback is the primary mechanism by which this document will advance toward a stable status.
+The specification has been validated by a cross-language conformance suite (11 positive vectors, 3 negative vectors) across ten reference implementations: Rust, JavaScript, Python, Go, Ruby, PHP, C, Swift, Kotlin, and C#.
+
+Readers are encouraged to report ambiguities or implementation difficulties. Clarifications that do not alter wire format may be incorporated as v1.x errata without a version bump.
 
 ---
 
@@ -70,7 +72,7 @@ The following NXS-specific terms are used throughout this document:
 
 - **Bitmask**: The variable-width LEB128-encoded presence mask that appears in every object header. A set bit indicates that the corresponding dictionary key is present in this object instance; a clear bit indicates absence. The Bitmask enables sparse objects without wasted space.
 
-- **Tail-Index**: The index structure located at the end of every `.nxb` file that maps record identifiers to their absolute byte offsets, enabling O(1) record access without scanning the Data Sector.
+- **Tail-Index**: The index structure located at the end of every `.nxb` file that maps record identifiers to their absolute byte offsets, enabling indexed record lookup (O(log N) via binary search) without scanning the Data Sector.
 
 - **Uniform Schema**: A schema in which every record in the Data Sector carries the same set of keys with the same sigil types. The Uniform Schema fast path allows implementations to skip per-object schema resolution after reading the first record.
 
@@ -98,9 +100,9 @@ The following NXS-specific terms are used throughout this document:
 
 The following goals are listed in priority order:
 
-1. **O(1) record access via Tail-Index.** A reader MUST be able to locate any top-level record by seeking to `EOF - 8` and following the Tail-Index, without scanning the Data Sector.
+1. **O(log N) record lookup via Tail-Index.** A reader MUST be able to locate any top-level record by seeking to `EOF - 8` and following the Tail-Index without scanning the Data Sector. Field access within a located record is O(1) via the Offset Table.
 
-2. **Zero-copy deserialization via 8-byte alignment.** Atomic values (Int64, Float64, Time) are stored at file offsets satisfying `offset mod 8 = 0`. A memory-mapped view of a `.nxb` file can be cast to typed pointers without copying.
+2. **Zero-copy access for aligned atomic values via 8-byte alignment.** Atomic values (Int64, Float64, Time) are stored at file offsets satisfying `offset mod 8 = 0`. A memory-mapped view of a `.nxb` file can be cast to typed pointers for these values without copying.
 
 3. **Human-readable source format.** The `.nxs` source format is UTF-8 text authored by humans and compiled to `.nxb` by a NXS compiler. The source format is the authoritative representation for version control and code review.
 
@@ -184,7 +186,7 @@ config {
 
 ## 6. The Binary Format (.nxb)
 
-The `.nxb` binary format is designed for zero-copy memory mapping. All multi-byte integer fields use **Little-Endian** byte order unless otherwise specified.
+The `.nxb` binary format is designed for memory mapping with zero-copy access to aligned atomic values (Int64, Float64, Time). Variable-length values (String, Binary) require a length-prefixed read but no copy of the payload; decoded string interpretation (e.g. `TextDecoder`) is a separate concern handled by the reader when materializing strings. All multi-byte integer fields use **Little-Endian** byte order. NXS does not support Big-Endian byte order and provides no endianness negotiation mechanism. Readers on Big-Endian architectures MUST byte-swap multi-byte fields after reading.
 
 ### 6.1 File Layout
 
@@ -308,22 +310,26 @@ The Tail-Index is located at the absolute byte offset given by `TailPtr` in the 
 | Field | Size | Description |
 | :--- | :--- | :--- |
 | `EntryCount` | 4 bytes | `uint32_t` total number of indexed records |
-| `RecordArray` | Variable | Pairs of `KeyID` (`uint16_t`) and `AbsoluteOffset` (`uint64_t`), Little-Endian |
+| `RecordArray` | Variable | Pairs of `RecordIndex` (`uint32_t`) and `AbsoluteOffset` (`uint64_t`), Little-Endian |
 | `FooterPtr` | 4 bytes | `uint32_t` byte offset back to the start of the Tail-Index |
 | `MagicFooter` | 4 bytes | `0x2153584E` (`NXS!`) |
 
 The final 8 bytes of a valid `.nxb` file are always `FooterPtr` followed by `MagicFooter`. A reader **MAY** locate the Tail-Index by seeking to `EOF - 8`, reading `FooterPtr`, and then seeking backward by `FooterPtr` bytes. This reverse-seek strategy is the recommended bootstrap path for readers that do not wish to validate the Preamble first.
 
-### 8.2 O(1) Access Protocol
+**RecordIndex semantics.** Each `RecordIndex` is a zero-based, sequential integer identifying a top-level record in the order it was written by the compiler (0 = first record, 1 = second, …). `RecordIndex` values are unique within a file and are not stable across files — they carry no meaning outside the file in which they appear.
 
-To access a specific record:
+**RecordArray ordering.** The `RecordArray` **MUST** be written in ascending `RecordIndex` order. This invariant enables O(log N) lookup via binary search. Readers **MUST** treat a non-ascending `RecordArray` as `ERR_MALFORMED_INDEX`.
+
+### 8.2 Record Access Protocol
+
+To access record `i`:
 
 1. Seek to `EOF - 8`. Verify `MagicFooter` equals `0x2153584E`.
 2. Read `FooterPtr` and seek to `EOF - 8 - FooterPtr` to reach the start of the Tail-Index.
-3. Read `EntryCount`. Binary-search or linearly scan `RecordArray` for the desired `KeyID`.
+3. Read `EntryCount`. Binary-search `RecordArray` for `RecordIndex = i`.
 4. Follow `AbsoluteOffset` directly to the object's `Magic` field (`NXSO`) in the Data Sector.
 
-Steps 1–3 touch a bounded, small region of the file (the Tail-Index) regardless of Data Sector size. Step 4 is a single seek. No portion of the Data Sector is read until the target record is accessed.
+Steps 1–3 touch only the Tail-Index region regardless of Data Sector size; step 4 is a single seek. No portion of the Data Sector is read until the target record is accessed. The amortized cost of locating any record is O(log N).
 
 ---
 
@@ -379,6 +385,7 @@ Conformant implementations **MUST** surface errors through a mechanism that comm
 | `ERR_UNKNOWN_SIGIL` | An unrecognized sigil byte was encountered during parsing |
 | `ERR_BAD_ESCAPE` | An invalid escape sequence was encountered in a string literal |
 | `ERR_OUT_OF_BOUNDS` | An offset points outside the bounds of the buffer |
+| `ERR_MALFORMED_INDEX` | The Tail-Index `RecordArray` is not in ascending `RecordIndex` order |
 | `ERR_DICT_MISMATCH` | The `DictHash` does not match and no embedded Schema Header is present |
 | `ERR_CIRCULAR_LINK` | A Link chain resolves back to its own origin |
 | `ERR_RECURSION_LIMIT` | Nesting depth exceeds the conformance limit (64 levels) |
@@ -441,13 +448,31 @@ For aggregate operations (sum, count, filter) over large Data Sectors, implement
 |---|---|---|---|---|---|
 | Human-readable source | Yes | Yes | No | No | Yes |
 | Zero-copy read | Yes | No | No | Yes | No |
-| O(1) record access | Yes | No | No | No* | No |
+| Indexed record access | O(log N) via Tail-Index | O(N) | O(N) | No standard index† | O(N) |
+| O(1) field access (within record) | Yes | No | No | Yes | No |
 | Schema required | Optional | No | Yes | Yes | No |
 | In-place patching | Yes | No | No | No | No |
 | Browser-safe above 512 MB | Yes | No | Yes | Yes | No |
 | Typed values | Yes | Partial | Yes | Yes | No |
 
-\* FlatBuffers provides O(1) field access within a single object but does not provide a cross-record index equivalent to the NXS Tail-Index.
+† FlatBuffers provides O(1) field access within a single object but does not define a cross-record index in the format itself.
+
+### 14.1 NXS vs. Columnar Formats (Arrow, Parquet)
+
+The two most common points of comparison in the high-performance data space are Apache Arrow (in-memory columnar) and Apache Parquet (disk-oriented columnar). NXS occupies a different position from both.
+
+**Apache Arrow** is an in-memory columnar format designed for analytical workloads: vectorized aggregates, cross-process data sharing via IPC, and zero-copy interchange between analytical engines. Its columnar layout makes column scans extremely fast but row (record) access requires reconstructing a row from N column buffers. Arrow also requires a runtime library; there is no stable on-disk format in the base Arrow spec (Arrow IPC is not a general-purpose file format).
+
+**Apache Parquet** is a disk-oriented columnar format with rich encoding schemes (dictionary, RLE, delta) tuned for compressed analytical reads. Like Arrow, it favors column scans over row access. Parquet is optimized for write-once, read-many analytics pipelines where schema is known up front and a query planner is available.
+
+**NXS** is row-oriented. It is designed for workloads where the unit of access is a record (or a field within a record), not a column over all records. Its key differentiators relative to Arrow and Parquet are:
+
+- **Human-authored source.** `.nxs` files are written by hand and committed to version control; Arrow and Parquet have no equivalent authoring format.
+- **Random row access without a query engine.** The tail-index gives any reader O(log N) access to any single record with no columnar reconstruction step and no engine dependency.
+- **In-place mutation.** Fixed-width atomic slots can be overwritten without rewriting the file; Arrow and Parquet are append-only.
+- **Multi-language, zero-dependency readers.** Each NXS reader is a single-file library with no schema registry or code generation requirement.
+
+The trade-off is that NXS is slower than Arrow or Parquet for full-column aggregates over large datasets, because values are interleaved by row rather than laid out contiguously by column. NXS is the better choice when records are the natural unit of work — configuration, event logs, entity stores — and the better choice in constrained environments (browser, embedded, CLI tools) where pulling in a full analytical engine is not acceptable.
 
 ---
 
