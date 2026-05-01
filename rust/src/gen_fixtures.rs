@@ -53,10 +53,11 @@ fn ensure_out_dir_writable(out_dir: &Path) {
                 out_dir.display()
             );
             eprintln!(
-                "hint: chmod u+w \"{}\"  (if files were created as root: sudo chown -R \"$USER\" \"{}\")",
+                "hint: chmod u+w \"{}\"  (if root-owned: sudo chown -R \"$USER\" \"{}\")",
                 out_dir.display(),
                 out_dir.display()
             );
+            eprintln!("hint: or use a writable path (e.g. ../out/fixtures); `make fixtures` picks that when js/fixtures is locked.");
             std::process::exit(1);
         }
     }

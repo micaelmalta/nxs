@@ -7,6 +7,8 @@ rust/target
 
 # Generated fixtures (regenerate with: cargo run --release --bin gen_fixtures -- js/fixtures 1000000)
 js/fixtures/
+# Makefile fallback when js/fixtures is not writable (e.g. root-owned deploy tree)
+out/fixtures/
 
 # Python build artifacts
 # _nxs.c is hand-written source — committed; only the compiled .so is excluded

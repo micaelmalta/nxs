@@ -4,7 +4,7 @@
 #   make lint           # strict: every step must pass (no swallowed failures)
 #   make fix            # auto-fix all fixable issues
 #   make test           # run all language test suites (needs fixtures: make fixtures)
-#   make fixtures       # generate js/fixtures (FIXTURE_COUNT=1000 default)
+#   make fixtures       # generate fixtures (FIXTURE_COUNT=1000; see FIXTURE_DIR / FIXTURE_OUT)
 #   make test-py-ci     # Python + C extension parity (matches CI)
 #   make test-ruby-ci   # Ruby + C extension smoke (matches CI)
 #   make test-php-ci    # PHP + C extension tests (matches CI)
@@ -31,8 +31,14 @@
         conformance-run-ruby conformance-run-php conformance-run-c conformance-run-swift \
         conformance-run-kotlin conformance-run-csharp conformance-run-rust
 
-FIXTURE_DIR     := js/fixtures
+FIXTURE_DIR     ?= js/fixtures
 FIXTURE_COUNT   ?= 1000
+# Writable path for .nxb/.json/.csv: defaults to FIXTURE_DIR, or out/fixtures when that dir is not writable.
+FIXTURE_OUT     := $(shell d="$(FIXTURE_DIR)"; mkdir -p "$$d" out/fixtures 2>/dev/null; \
+	if touch "$$d/.nxs_wprobe" 2>/dev/null; then rm -f "$$d/.nxs_wprobe"; printf '%s' "$$d"; \
+	elif touch out/fixtures/.nxs_wprobe 2>/dev/null; then rm -f out/fixtures/.nxs_wprobe; \
+	echo "nxs: not writable: $$d — using out/fixtures (override with FIXTURE_DIR=...)" 1>&2; printf '%s' out/fixtures; \
+	else printf '%s' "$$d"; fi)
 JAVA_HOME       ?= /opt/homebrew/opt/openjdk@21
 # Default to net10 so `make conformance-run` works with a single current SDK; CI sets net9 where needed.
 DOTNET_FRAMEWORK ?= net10.0
@@ -71,10 +77,10 @@ rust-examples:
 
 test-rust-ci: test-rust rust-examples
 
-# Best-effort: repo checkouts or docker-created trees may lack u+w on js/fixtures.
+# Best-effort chmod; output path is FIXTURE_OUT (fallback: out/fixtures).
 fixtures:
-	@chmod -R u+w $(FIXTURE_DIR) 2>/dev/null || true
-	cd rust && cargo run --release --bin gen_fixtures -- ../$(FIXTURE_DIR) $(FIXTURE_COUNT)
+	@chmod -R u+w $(FIXTURE_DIR) out/fixtures 2>/dev/null || true
+	cd rust && cargo run --release --bin gen_fixtures -- ../$(FIXTURE_OUT) $(FIXTURE_COUNT)
 
 # ── JavaScript ───────────────────────────────────────────────────────────────
 
@@ -87,7 +93,7 @@ fix-js:
 	cd js && npx eslint --fix --max-warnings 0 nxs.js nxs_writer.js wasm.js bench.js test.js
 
 test-js:
-	node js/test.js $(FIXTURE_DIR)
+	node js/test.js $(FIXTURE_OUT)
 
 # ── Python ───────────────────────────────────────────────────────────────────
 
@@ -100,11 +106,11 @@ fix-py:
 	cd py && ruff check --select E,W,F --ignore E501,E701,E702 --fix .
 
 test-py:
-	cd py && python test_nxs.py ../$(FIXTURE_DIR)
+	cd py && python test_nxs.py ../$(FIXTURE_OUT)
 
 test-py-ci: test-py
 	cd py && bash build_ext.sh
-	cd py && python test_c_ext.py ../$(FIXTURE_DIR)
+	cd py && python test_c_ext.py ../$(FIXTURE_OUT)
 
 # ── Go ────────────────────────────────────────────────────────────────────────
 
@@ -132,11 +138,11 @@ fix-ruby:
 	rubocop ruby/nxs.rb ruby/test.rb ruby/bench.rb --config ruby/.rubocop.yml --no-color --cache false -A
 
 test-ruby:
-	ruby ruby/test.rb $(FIXTURE_DIR)
+	ruby ruby/test.rb $(FIXTURE_OUT)
 
 test-ruby-ci: test-ruby
 	bash ruby/ext/build.sh
-	ruby ruby/bench_c.rb $(FIXTURE_DIR)
+	ruby ruby/bench_c.rb $(FIXTURE_OUT)
 
 # ── PHP ───────────────────────────────────────────────────────────────────────
 
@@ -148,11 +154,11 @@ lint-php:
 fix-php: lint-php
 
 test-php:
-	php php/test.php $(FIXTURE_DIR)
+	php php/test.php $(FIXTURE_OUT)
 
 test-php-ci: test-php
 	bash php/nxs_ext/build.sh
-	php -d extension=php/nxs_ext/modules/nxs.so php/test.php $(FIXTURE_DIR)
+	php -d extension=php/nxs_ext/modules/nxs.so php/test.php $(FIXTURE_OUT)
 
 # ── C ─────────────────────────────────────────────────────────────────────────
 
@@ -163,7 +169,7 @@ lint-c:
 fix-c: lint-c
 
 test-c:
-	cd c && make test -s && ./test ../$(FIXTURE_DIR)
+	cd c && make test -s && ./test ../$(FIXTURE_OUT)
 
 # ── Swift ─────────────────────────────────────────────────────────────────────
 
@@ -176,7 +182,7 @@ fix-swift:
 	cd swift && swiftlint --fix --strict --cache-path .swiftlint-cache Sources/NXS
 
 test-swift:
-	cd swift && swift run nxs-test ../$(FIXTURE_DIR)
+	cd swift && swift run nxs-test ../$(FIXTURE_OUT)
 
 # ── Kotlin ───────────────────────────────────────────────────────────────────
 
@@ -184,7 +190,7 @@ lint-kotlin:
 	cd kotlin && JAVA_HOME=$(JAVA_HOME) PATH="$(JAVA_HOME)/bin:$$PATH" ./gradlew ktlintCheck -q
 
 test-kotlin:
-	cd kotlin && JAVA_HOME=$(JAVA_HOME) PATH=$(JAVA_HOME)/bin:$$PATH ./gradlew run --args="../$(FIXTURE_DIR)" -q
+	cd kotlin && JAVA_HOME=$(JAVA_HOME) PATH=$(JAVA_HOME)/bin:$$PATH ./gradlew run --args="../$(FIXTURE_OUT)" -q
 
 # ── C# ────────────────────────────────────────────────────────────────────────
 
@@ -195,7 +201,7 @@ fix-csharp:
 	cd csharp && DOTNET_FRAMEWORK=$(DOTNET_FRAMEWORK) dotnet format nxs.csproj
 
 test-csharp:
-	cd csharp && dotnet run -p:NxsTargetFramework=$(DOTNET_FRAMEWORK) -- ../$(FIXTURE_DIR)
+	cd csharp && dotnet run -p:NxsTargetFramework=$(DOTNET_FRAMEWORK) -- ../$(FIXTURE_OUT)
 
 # ── Conformance suite ─────────────────────────────────────────────────────────
 # Generates canonical .nxb/.expected.json vectors, then runs all 10 language
