@@ -48,7 +48,13 @@ fn main() {
         verify_hash: cli.verify_hash,
     };
 
-    match convert::run_inspect(&args) {
+    let result = if args.json_output {
+        nxs::convert::inspect::render_json(std::io::stdout(), &args)
+    } else {
+        nxs::convert::inspect::render_text(std::io::stdout(), &args)
+    };
+
+    match result {
         Ok(_report) => {}
         Err(e) => {
             eprintln!("error: {e}");
