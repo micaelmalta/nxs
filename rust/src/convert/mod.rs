@@ -88,9 +88,16 @@ pub enum ConflictPolicy {
 
 /// Return type of the inference pass: each key's chosen sigil plus whether it
 /// is optional (absent in ≥1 record).
+///
+/// During pass 1, `key_states` and `total_records` are populated alongside
+/// `keys`. After `infer::finalize`, `key_states` may be dropped.
 #[derive(Debug, Default)]
 pub struct InferredSchema {
     pub keys: Vec<InferredKey>,
+    /// Parallel to `keys` — accumulates raw observations during pass 1.
+    pub key_states: Vec<crate::convert::infer::KeyState>,
+    /// Total records seen during pass 1 (used to detect optional keys).
+    pub total_records: usize,
 }
 
 #[derive(Debug)]
