@@ -5,7 +5,7 @@ Zero-copy `.nxb` reader for Go 1.21+. No external dependencies.
 ## Install
 
 ```bash
-go get github.com/micaelmalta/nxs/go
+go get github.com/micaelmalta/nexus-standard/go
 ```
 
 ## Requirements
@@ -16,7 +16,7 @@ Go 1.21+.
 
 ```go
 import (
-    "github.com/micaelmalta/nxs/go"
+    "github.com/micaelmalta/nexus-standard/go"
     "os"
 )
 
@@ -65,7 +65,7 @@ At 1M records, `SumF64Fast` runs in ~10.9 ms vs ~1.05 s for `json.Unmarshal` (~1
 ## Write a file
 
 ```go
-import "github.com/micaelmalta/nxs/go"
+import "github.com/micaelmalta/nexus-standard/go"
 
 schema := nxs.NewSchema([]string{"id", "username", "score", "active"})
 w := nxs.NewWriter(schema)

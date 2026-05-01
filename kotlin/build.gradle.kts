@@ -55,12 +55,12 @@ publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
-            artifactId = "nxs-kotlin"
+            artifactId = "nexus-standard"
 
             pom {
-                name.set("nxs-kotlin")
+                name.set("nexus-standard")
                 description.set("Zero-copy reader for the Nexus Standard (NXS) binary format")
-                url.set("https://github.com/micaelmalta/nxs")
+                url.set("https://github.com/micaelmalta/nexus-standard")
                 licenses {
                     license {
                         name.set("MIT License")
@@ -74,9 +74,9 @@ publishing {
                     }
                 }
                 scm {
-                    connection.set("scm:git:git://github.com/micaelmalta/nxs.git")
-                    developerConnection.set("scm:git:ssh://github.com/micaelmalta/nxs.git")
-                    url.set("https://github.com/micaelmalta/nxs")
+                    connection.set("scm:git:git://github.com/micaelmalta/nexus-standard.git")
+                    developerConnection.set("scm:git:ssh://github.com/micaelmalta/nexus-standard.git")
+                    url.set("https://github.com/micaelmalta/nexus-standard")
                 }
             }
         }

@@ -1,5 +1,5 @@
 Gem::Specification.new do |spec|
-  spec.name          = "nxs-format"
+  spec.name          = "nexus-standard"
   spec.version       = "1.0.0"
   spec.authors       = ["Micael Malta"]
   spec.email         = ["micael@example.com"]
@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
     zero-copy memory-mapped access to typed records with O(1) random access
     via the tail-index.
   DESC
-  spec.homepage      = "https://github.com/micaelmalta/nxs"
+  spec.homepage      = "https://github.com/micaelmalta/nexus-standard"
   spec.license       = "MIT"
 
   spec.required_ruby_version = ">= 3.0"
@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["."]
 
   spec.metadata = {
-    "source_code_uri" => "https://github.com/micaelmalta/nxs",
-    "changelog_uri"   => "https://github.com/micaelmalta/nxs/releases",
+    "source_code_uri" => "https://github.com/micaelmalta/nexus-standard",
+    "changelog_uri"   => "https://github.com/micaelmalta/nexus-standard/releases",
   }
 end

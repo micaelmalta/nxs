@@ -1,5 +1,5 @@
 {
-  "name": "@micaelmalta/nxs",
+  "name": "@micaelmalta/nexus-standard",
   "version": "1.0.0",
   "type": "module",
   "description": "JavaScript reader for the Nexus Standard (NXS) binary format",
@@ -24,7 +24,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/micaelmalta/nxs.git"
+    "url": "https://github.com/micaelmalta/nexus-standard.git"
   },
   "license": "MIT",
   "author": "Micael Malta",

@@ -15,7 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	nxs "github.com/micaelmalta/nxs/go"
+	nxs "github.com/micaelmalta/nexus-standard/go"
 )
 
 const MAGIC_LIST uint32 = 0x4E58534C // NXSL

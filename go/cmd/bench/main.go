@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/micaelmalta/nxs/go"
+	"github.com/micaelmalta/nexus-standard/go"
 )
 
 type record struct {
