@@ -36,6 +36,18 @@ path = "../conformance/generate.rs"
 name = "conformance_runner"
 path = "../conformance/run_rust.rs"
 
+[[bin]]
+name = "nxs-import"
+path = "src/bin/nxs_import.rs"
+
+[[bin]]
+name = "nxs-export"
+path = "src/bin/nxs_export.rs"
+
+[[bin]]
+name = "nxs-inspect"
+path = "src/bin/nxs_inspect.rs"
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
