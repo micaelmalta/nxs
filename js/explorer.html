@@ -3,55 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>NXS Log Explorer — 10M lines, smooth scroll</title>
+<script>(function(){try{if(localStorage.getItem("nxs-theme")==="light")document.documentElement.dataset.theme="light";}catch(_){}})();</script>
+<link rel="stylesheet" href="theme.css">
 <style>
-  /* ── shared nav ── */
-  .site-nav {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0 24px;
-    height: 44px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-    overflow-x: auto;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .site-nav .home {
-    font-weight: 600;
-    color: var(--accent);
-    text-decoration: none;
-    margin-right: 8px;
-    flex-shrink: 0;
-  }
-  .site-nav .sep { color: var(--border); margin: 0 2px; }
-  .site-nav a {
-    color: var(--muted);
-    text-decoration: none;
-    padding: 4px 10px;
-    border-radius: 5px;
-    flex-shrink: 0;
-  }
-  .site-nav a:hover { color: var(--text); background: rgba(255,255,255,0.06); }
-  .site-nav a[aria-current="page"] {
-    color: var(--text);
-    background: rgba(122,162,247,0.12);
-    font-weight: 500;
-  }
-  :root {
-    --bg: #0f1115;
-    --panel: #181b23;
-    --panel-2: #1f2330;
-    --text: #e7ebf2;
-    --muted: #8b95a8;
-    --accent: #7aa2f7;
-    --good: #9ece6a;
-    --warn: #e0af68;
-    --bad: #f7768e;
-    --border: #2a2f3c;
-    --row-height: 22px;
-  }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0;
@@ -127,7 +81,7 @@
     font-family: inherit;
   }
   button { cursor: pointer; }
-  button.primary { background: var(--accent); color: #0b0e14; border-color: var(--accent); font-weight: 600; }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   input[type="text"]:focus, input[type="number"]:focus, button:focus {
     outline: 1px solid var(--accent); outline-offset: 1px;
@@ -216,9 +170,9 @@
     overflow: hidden;
     color: var(--text);
   }
-  .row:hover { background: rgba(122, 162, 247, 0.08); }
-  .row.match { background: rgba(224, 175, 104, 0.12); }
-  .row.current-match { background: rgba(224, 175, 104, 0.30); }
+  .row:hover { background: var(--row-hover-accent); }
+  .row.match { background: var(--row-match-bg); }
+  .row.current-match { background: var(--row-current-match-bg); }
   .row .lineno {
     color: var(--muted);
     width: 10ch;
@@ -265,7 +219,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 17, 21, 0.85);
+    background: var(--overlay-scrim);
     color: var(--muted);
     font-size: 14px;
     z-index: 10;
@@ -314,6 +268,7 @@
   <a href="ticker.html">Ticker</a>
   <a href="workers.html">Workers</a>
   <a href="explorer.html" aria-current="page">Explorer</a>
+  <button type="button" class="theme-toggle" aria-label="Theme"></button>
 </nav>
 <main>
   <header class="hdr">
@@ -1081,5 +1036,6 @@ overlayEl.querySelectorAll(".load-btn").forEach(btn => {
   });
 });
 </script>
+<script src="theme.js"></script>
 </body>
 </html>

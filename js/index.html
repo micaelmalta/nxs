@@ -4,49 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NXS — JavaScript demos</title>
+<script>(function(){try{if(localStorage.getItem("nxs-theme")==="light")document.documentElement.dataset.theme="light";}catch(_){}})();</script>
+<link rel="stylesheet" href="theme.css">
 <style>
-  /* ── shared nav ── */
-  .site-nav {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0 24px;
-    height: 44px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-  .site-nav .home {
-    font-weight: 600;
-    color: var(--accent);
-    text-decoration: none;
-    margin-right: 8px;
-    flex-shrink: 0;
-  }
-  .site-nav .sep { color: var(--border); margin: 0 2px; }
-  .site-nav a {
-    color: var(--muted);
-    text-decoration: none;
-    padding: 4px 10px;
-    border-radius: 5px;
-    flex-shrink: 0;
-  }
-  .site-nav a:hover { color: var(--text); background: rgba(255,255,255,0.06); }
-  .site-nav a[aria-current="page"] {
-    color: var(--text);
-    background: rgba(122,162,247,0.12);
-    font-weight: 500;
-  }
-  :root {
-    --bg: #0f1115;
-    --panel: #181b23;
-    --text: #e7ebf2;
-    --muted: #8b95a8;
-    --accent: #7aa2f7;
-    --border: #2a2f3c;
-  }
   * { box-sizing: border-box; }
   html, body {
     margin: 0;
@@ -95,7 +55,7 @@
     font-weight: 500;
   }
   li a:hover {
-    background: rgba(122, 162, 247, 0.08);
+    background: var(--card-hover-bg);
     color: var(--accent);
   }
   li .meta {
@@ -124,6 +84,7 @@
   <a href="ticker.html">Ticker</a>
   <a href="workers.html">Workers</a>
   <a href="explorer.html">Explorer</a>
+  <button type="button" class="theme-toggle" aria-label="Theme"></button>
 </nav>
 <main>
   <h1>NXS browser demos</h1>
@@ -143,5 +104,6 @@
     </li>
   </ul>
 </main>
+<script src="theme.js"></script>
 </body>
 </html>
