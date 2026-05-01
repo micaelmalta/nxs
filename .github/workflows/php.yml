@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['php/**', 'Makefile', '.github/workflows/php.yml']
+    tags:
+      - 'php/v*'
   pull_request:
     paths: ['php/**', 'Makefile', '.github/workflows/php.yml']
 

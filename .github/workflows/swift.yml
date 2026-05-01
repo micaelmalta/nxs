@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['swift/**', 'Makefile', '.github/workflows/swift.yml']
+    tags:
+      - 'swift/v*'
   pull_request:
     paths: ['swift/**', 'Makefile', '.github/workflows/swift.yml']
 

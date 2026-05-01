@@ -2,8 +2,9 @@ name: Publish crates.io
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'rust/v*'
 
 jobs:
   test:

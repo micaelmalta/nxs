@@ -2,8 +2,9 @@ name: Publish npm
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'js/v*'
 
 jobs:
   publish:

@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing git tag to build (e.g. v1.0.0)'
+        description: 'Existing git tag to build (e.g. c/v1.0.0)'
         required: true
         type: string
   push:
-    tags: ['v*']
+    tags:
+      - 'c/v*'
 
 jobs:
   build-and-release:
@@ -33,7 +34,10 @@ jobs:
           else
             TAG="${GITHUB_REF_NAME}"
           fi
-          VERSION="${TAG#v}"
+          case "${TAG}" in
+            c/v*) VERSION="${TAG#c/v}" ;;
+            *) VERSION="${TAG#v}" ;;
+          esac
           TARDIR="nxs-c-${VERSION}"
           mkdir "${TARDIR}"
           cp c/nxs.h c/nxs.c c/CMakeLists.txt c/README.md "${TARDIR}/"
