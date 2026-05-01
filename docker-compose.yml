@@ -1,12 +1,23 @@
 services:
-  nxs:
+  app:
     build:
       context: ./js
       dockerfile: Dockerfile
     volumes:
       - ./js:/app
-      - ./js/fixtures:/app/fixtures
     restart: always
+    networks:
+      - shared_network
+
+  # Edge: /fixtures/* from disk; everything else → nxs (Python COOP/COEP server on 8000).
+  nxs:
+    image: nginx:alpine
+    depends_on:
+      - nxs
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./js/fixtures:/var/www/fixtures:ro
+    restart: unless-stopped
     networks:
       - shared_network
 
