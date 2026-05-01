@@ -231,7 +231,7 @@ fn make_reader<R: Read>(reader: R) -> Reader<std::io::BufReader<R>> {
 }
 
 /// Pass 1 — infer schema from an XML reader.
-pub fn infer_schema<R: Read>(reader: R, args: &ImportArgs) -> Result<InferredSchema> {
+pub fn infer_schema<R: Read>(mut reader: R, args: &ImportArgs) -> Result<InferredSchema> {
     let record_tag = args.xml_record_tag.as_deref().ok_or_else(|| {
         NxsError::ConvertParseError {
             offset: 0,
@@ -239,7 +239,14 @@ pub fn infer_schema<R: Read>(reader: R, args: &ImportArgs) -> Result<InferredSch
         }
     })?;
 
-    let xml_reader = make_reader(reader);
+    // Buffer the input so we can (1) pre-scan for entity expansion, (2) parse.
+    let mut raw = Vec::new();
+    reader
+        .read_to_end(&mut raw)
+        .map_err(|e| NxsError::IoError(e.to_string()))?;
+    check_for_entity_expansion(&raw)?;
+
+    let xml_reader = make_reader(std::io::Cursor::new(raw));
     let mut acc = InferredSchema::default();
 
     parse_records(xml_reader, args, record_tag, |fields| {
@@ -252,7 +259,7 @@ pub fn infer_schema<R: Read>(reader: R, args: &ImportArgs) -> Result<InferredSch
 
 /// Pass 2 — emit .nxb from an XML reader using the inferred schema.
 pub fn emit<R: Read, W: Write>(
-    reader: R,
+    mut reader: R,
     mut writer: W,
     schema: &InferredSchema,
     args: &ImportArgs,
@@ -264,12 +271,19 @@ pub fn emit<R: Read, W: Write>(
         }
     })?;
 
+    // Pre-scan for entity expansion before parsing.
+    let mut raw = Vec::new();
+    reader
+        .read_to_end(&mut raw)
+        .map_err(|e| NxsError::IoError(e.to_string()))?;
+    check_for_entity_expansion(&raw)?;
+
     let key_names: Vec<&str> = schema.keys.iter().map(|k| k.name.as_str()).collect();
     let nxs_schema = Schema::new(&key_names);
     let mut nxs_writer = NxsWriter::new(&nxs_schema);
     let mut records_written = 0usize;
 
-    let xml_reader = make_reader(reader);
+    let xml_reader = make_reader(std::io::Cursor::new(raw));
     parse_records(xml_reader, args, record_tag, |fields| {
         nxs_writer.begin_object();
         for (key, value) in &fields {
@@ -293,6 +307,29 @@ pub fn emit<R: Read, W: Write>(
                     }
                     b'?' => {
                         nxs_writer.write_bool(slot, value == "true");
+                    }
+                    b'@' => {
+                        if let Ok(t) = value.parse::<i64>() {
+                            nxs_writer.write_time(slot, t);
+                        } else {
+                            nxs_writer.write_str(slot, value);
+                        }
+                    }
+                    b'<' => {
+                        if let Ok(bytes) = (0..value.len())
+                            .step_by(2)
+                            .map(|i| {
+                                u8::from_str_radix(value.get(i..i + 2).unwrap_or("??"), 16)
+                            })
+                            .collect::<std::result::Result<Vec<u8>, _>>()
+                        {
+                            nxs_writer.write_bytes(slot, &bytes);
+                        } else {
+                            nxs_writer.write_str(slot, value);
+                        }
+                    }
+                    b'^' => {
+                        // null: key stays absent
                     }
                     _ => {
                         nxs_writer.write_str(slot, value);

@@ -36,6 +36,8 @@ pub struct KeyState {
     pub total_records_seen_in: usize,
     /// Records in which this key was present (non-null).
     pub present_count: usize,
+    /// Sigil from the very first non-null observation (for `FirstWins` policy).
+    pub first_sigil: Option<u8>,
 }
 
 impl KeyState {
@@ -51,29 +53,35 @@ impl KeyState {
         // int: parses as i64. Fires first so 0/1 stay int, not bool.
         if raw.parse::<i64>().is_ok() {
             self.seen_int = true;
+            self.first_sigil.get_or_insert(SIGIL_INT);
             return;
         }
         // float: parses as f64 (and is not a pure int)
         if raw.parse::<f64>().is_ok() {
             self.seen_float = true;
+            self.first_sigil.get_or_insert(SIGIL_FLOAT);
             return;
         }
         // bool: exactly true/false
         if raw == "true" || raw == "false" {
             self.seen_bool = true;
+            self.first_sigil.get_or_insert(SIGIL_BOOL);
             return;
         }
         // time: contains '-' or 'T' and passes basic date/datetime heuristic
         if is_time_like(raw) {
             self.seen_time = true;
+            self.first_sigil.get_or_insert(SIGIL_TIME);
             return;
         }
         // hex: length ≥ 16, even, all hex chars
         if is_hex_like(raw) {
             self.seen_binary_hex = true;
+            self.first_sigil.get_or_insert(SIGIL_HEX);
             return;
         }
         self.seen_string = true;
+        self.first_sigil.get_or_insert(SIGIL_STRING);
     }
 
     /// Collapse accumulated flags to a single sigil byte per plan priority.
@@ -97,7 +105,11 @@ impl KeyState {
                 ConflictPolicy::Error => Err(NxsError::ConvertSchemaConflict(
                     "mixed types observed for key".into(),
                 )),
-                ConflictPolicy::CoerceString | ConflictPolicy::FirstWins => Ok(SIGIL_STRING),
+                ConflictPolicy::CoerceString => Ok(SIGIL_STRING),
+                ConflictPolicy::FirstWins => {
+                    // Use the sigil from the very first non-null observation.
+                    Ok(self.first_sigil.unwrap_or(SIGIL_STRING))
+                }
             };
         }
 

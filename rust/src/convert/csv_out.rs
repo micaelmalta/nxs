@@ -65,17 +65,6 @@ pub fn run<R: Read, W: Write>(
         let field_map: std::collections::HashMap<&str, &DecodedValue> =
             fields.iter().map(|(k, v)| (k.as_str(), v)).collect();
 
-        let row_cells: Vec<&str> = columns
-            .iter()
-            .map(|col| {
-                field_map
-                    .get(col.as_str())
-                    .map(|_| "") // placeholder — replaced below
-                    .unwrap_or("")
-            })
-            .collect();
-        let _ = row_cells; // replaced by owned version below
-
         let owned_cells: Vec<String> = columns
             .iter()
             .map(|col| match field_map.get(col.as_str()) {

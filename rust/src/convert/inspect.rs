@@ -120,9 +120,10 @@ pub fn render_json<W: Write>(mut writer: W, args: &InspectArgs) -> Result<Inspec
             &decoded.key_sigils,
         )
         .unwrap_or_default();
+        let bitmask_hex = read_object_bitmask_hex(&data, abs_off);
         records_json.push(serde_json::json!({
             "offset": abs_off,
-            "bitmask_hex": format!("{:x}", abs_off), // placeholder; bitmask not re-parsed here
+            "bitmask_hex": bitmask_hex,
             "field_count": fields.len()
         }));
     }
@@ -151,6 +152,31 @@ pub fn render_json<W: Write>(mut writer: W, args: &InspectArgs) -> Result<Inspec
         dict_hash_ok,
         record_count: decoded.record_count,
     })
+}
+
+/// Extract the raw LEB128 bitmask bytes from the NXSO object header at `off`
+/// and format them as a hex string. Returns `"?"` on any parse error.
+fn read_object_bitmask_hex(data: &[u8], off: usize) -> String {
+    // Object header layout: [NXSO u32][length u32][LEB128 bitmask...]
+    let bitmask_start = off + 8; // skip 4-byte magic + 4-byte length
+    let mut pos = bitmask_start;
+    let mut bitmask_bytes: Vec<u8> = Vec::new();
+    loop {
+        let b = match data.get(pos) {
+            Some(&b) => b,
+            None => return "?".to_string(),
+        };
+        bitmask_bytes.push(b);
+        pos += 1;
+        if b & 0x80 == 0 {
+            break;
+        }
+        if bitmask_bytes.len() > 74 {
+            // Cap at 512 bits (74 bytes) — same limit as decoder
+            break;
+        }
+    }
+    bitmask_bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn read_input(opts: &CommonOpts) -> Result<Vec<u8>> {

@@ -138,6 +138,29 @@ pub fn emit<R: Read, W: Write>(
                     b'?' => {
                         nxs_writer.write_bool(slot, value == "true");
                     }
+                    b'@' => {
+                        if let Ok(t) = value.parse::<i64>() {
+                            nxs_writer.write_time(slot, t);
+                        } else {
+                            nxs_writer.write_str(slot, value);
+                        }
+                    }
+                    b'<' => {
+                        if let Ok(bytes) = (0..value.len())
+                            .step_by(2)
+                            .map(|i| {
+                                u8::from_str_radix(value.get(i..i + 2).unwrap_or("??"), 16)
+                            })
+                            .collect::<std::result::Result<Vec<u8>, _>>()
+                        {
+                            nxs_writer.write_bytes(slot, &bytes);
+                        } else {
+                            nxs_writer.write_str(slot, value);
+                        }
+                    }
+                    b'^' => {
+                        // null: key stays absent
+                    }
                     _ => {
                         nxs_writer.write_str(slot, value);
                     }

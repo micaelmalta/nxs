@@ -555,9 +555,14 @@ pub fn run_export(args: &ExportArgs) -> Result<ExportReport> {
     }
 }
 
-/// Top-level driver for nxs-inspect. Stub.
-pub fn run_inspect(_args: &InspectArgs) -> Result<InspectReport> {
-    unimplemented!("run_inspect — see plan step `impl: nxs-inspect CLI`")
+/// Top-level driver for nxs-inspect.
+pub fn run_inspect(args: &InspectArgs) -> Result<InspectReport> {
+    use crate::convert::inspect;
+    if args.json_output {
+        inspect::render_json(std::io::stdout(), args)
+    } else {
+        inspect::render_text(std::io::stdout(), args)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
