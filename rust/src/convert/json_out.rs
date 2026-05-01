@@ -37,13 +37,13 @@ pub fn run<R: Read, W: Write>(
             break;
         }
         let abs_off = u64::from_le_bytes(
-            data[entry_off + 2..entry_off + 10]
+            data.get(entry_off + 2..entry_off + 10)
+                .ok_or(NxsError::OutOfBounds)?
                 .try_into()
                 .map_err(|_| NxsError::OutOfBounds)?,
         ) as usize;
-        let fields =
-            decoder::decode_record_at(&data, abs_off, &decoded.keys, &decoded.key_sigils)
-                .unwrap_or_default();
+        let fields = decoder::decode_record_at(&data, abs_off, &decoded.keys, &decoded.key_sigils)
+            .unwrap_or_default();
         let obj = fields_to_json(fields, args.binary);
         record_values.push(obj);
         records_read += 1;
@@ -60,8 +60,7 @@ pub fn run<R: Read, W: Write>(
         }
     } else if args.pretty {
         let arr = serde_json::Value::Array(record_values);
-        let s = serde_json::to_string_pretty(&arr)
-            .map_err(|e| NxsError::IoError(e.to_string()))?;
+        let s = serde_json::to_string_pretty(&arr).map_err(|e| NxsError::IoError(e.to_string()))?;
         let out = format!("{s}\n");
         writer
             .write_all(out.as_bytes())
@@ -97,11 +96,9 @@ fn fields_to_json(
 fn decoded_value_to_json(val: DecodedValue, binary_mode: BinaryEncoding) -> serde_json::Value {
     match val {
         DecodedValue::Int(i) => serde_json::Value::Number(i.into()),
-        DecodedValue::Float(f) => {
-            serde_json::Number::from_f64(f)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null)
-        }
+        DecodedValue::Float(f) => serde_json::Number::from_f64(f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
         DecodedValue::Bool(b) => serde_json::Value::Bool(b),
         DecodedValue::Str(s) => serde_json::Value::String(s),
         DecodedValue::Time(t) => serde_json::Value::Number(t.into()),
@@ -115,9 +112,9 @@ fn decoded_value_to_json(val: DecodedValue, binary_mode: BinaryEncoding) -> serd
         }
         DecodedValue::Object(fields) => fields_to_json(fields, binary_mode),
         DecodedValue::Binary(bytes) => match binary_mode {
-            BinaryEncoding::Base64 => serde_json::Value::String(
-                base64::engine::general_purpose::STANDARD.encode(&bytes),
-            ),
+            BinaryEncoding::Base64 => {
+                serde_json::Value::String(base64::engine::general_purpose::STANDARD.encode(&bytes))
+            }
             BinaryEncoding::Hex => {
                 let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
                 serde_json::Value::String(hex)
@@ -134,8 +131,8 @@ fn decoded_value_to_json(val: DecodedValue, binary_mode: BinaryEncoding) -> serd
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::convert::{BinaryEncoding, CommonOpts, ExportArgs, ExportFormat};
     use crate::convert::json_in;
+    use crate::convert::{BinaryEncoding, CommonOpts, ExportArgs, ExportFormat};
     use crate::convert::{ConflictPolicy, ImportArgs, ImportFormat};
     use crate::decoder;
 
@@ -216,7 +213,10 @@ mod tests {
         run(nxb.as_slice(), &mut out, &args).unwrap();
         let text = String::from_utf8(out).unwrap();
         // Pretty output should have multiple lines
-        assert!(text.lines().count() > 2, "pretty output must span multiple lines");
+        assert!(
+            text.lines().count() > 2,
+            "pretty output must span multiple lines"
+        );
     }
 
     #[test]
@@ -240,7 +240,10 @@ mod tests {
         assert_eq!(report.records_read, 1);
         let text = String::from_utf8(out).unwrap();
         // base64 of [0xDE, 0xAD, 0xBE, 0xEF] = "3q2+7w=="
-        assert!(text.contains("3q2+7w==") || !text.contains("null"), "binary field must be base64 encoded");
+        assert!(
+            text.contains("3q2+7w==") || !text.contains("null"),
+            "binary field must be base64 encoded"
+        );
     }
 
     #[test]

@@ -91,9 +91,7 @@ pub fn emit<R: Read, W: Write>(
         .from_reader(reader);
 
     let headers: Vec<String> = if args.csv_no_header {
-        (0..schema.keys.len())
-            .map(|i| format!("col_{i}"))
-            .collect()
+        (0..schema.keys.len()).map(|i| format!("col_{i}")).collect()
     } else {
         rdr.headers()
             .map_err(|e| NxsError::ConvertParseError {
@@ -148,9 +146,7 @@ pub fn emit<R: Read, W: Write>(
                     b'<' => {
                         if let Ok(bytes) = (0..value.len())
                             .step_by(2)
-                            .map(|i| {
-                                u8::from_str_radix(value.get(i..i + 2).unwrap_or("??"), 16)
-                            })
+                            .map(|i| u8::from_str_radix(value.get(i..i + 2).unwrap_or("??"), 16))
                             .collect::<std::result::Result<Vec<u8>, _>>()
                         {
                             nxs_writer.write_bytes(slot, &bytes);

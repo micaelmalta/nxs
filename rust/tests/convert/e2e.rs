@@ -81,8 +81,7 @@ fn e2e_json_roundtrip_value_equivalent() {
 
 #[test]
 fn e2e_csv_roundtrip_value_equivalent() {
-    let csv_input =
-        b"id,name,active\n1,alice,true\n2,bob,false\n3,carol,true\n" as &[u8];
+    let csv_input = b"id,name,active\n1,alice,true\n2,bob,false\n3,carol,true\n" as &[u8];
 
     let mut csv_file = NamedTempFile::new().unwrap();
     csv_file.write_all(csv_input).unwrap();
@@ -129,8 +128,8 @@ fn e2e_csv_roundtrip_value_equivalent() {
 fn e2e_10k_records_under_threshold() {
     // Only enforced on release builds; debug is expected to be slower.
     let profile = std::env::var("CARGO_PROFILE").unwrap_or_default();
-    let is_release = profile == "release"
-        || std::env::var("NXS_PERF_SMOKE").unwrap_or_default() == "1";
+    let is_release =
+        profile == "release" || std::env::var("NXS_PERF_SMOKE").unwrap_or_default() == "1";
 
     let records: Vec<serde_json::Value> = (0u32..10_000)
         .map(|i| serde_json::json!({"id": i, "name": format!("user_{i}")}))

@@ -273,22 +273,17 @@ struct SchemaHintKey {
 pub fn load_schema_hint(path: &std::path::Path) -> Result<InferredSchema> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
-    let hint: SchemaHintFile = serde_yml::from_str(&text).map_err(|e| {
-        crate::error::NxsError::ConvertParseError {
+    let hint: SchemaHintFile =
+        serde_yml::from_str(&text).map_err(|e| crate::error::NxsError::ConvertParseError {
             offset: 0,
             msg: format!("schema hint YAML parse error: {e}"),
-        }
-    })?;
+        })?;
 
     let keys = hint
         .keys
         .into_iter()
         .map(|(name, k)| {
-            let sigil = k
-                .sigil
-                .bytes()
-                .next()
-                .unwrap_or(b'"');
+            let sigil = k.sigil.bytes().next().unwrap_or(b'"');
             let list_of = k.list_of.as_deref().and_then(|s| s.bytes().next());
             InferredKey {
                 name,
@@ -351,24 +346,28 @@ pub fn run_import(args: &ImportArgs) -> Result<ImportReport> {
                     let schema = if let Some(hint_path) = &args.schema_hint {
                         load_schema_hint(hint_path)?
                     } else {
-                        let f1 = std::fs::File::open(path)
-                            .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
+                        let f1 = std::fs::File::open(path).map_err(|e| {
+                            crate::error::NxsError::IoError(format!("{}: {e}", path.display()))
+                        })?;
                         json_in::infer_schema(BufReader::new(f1), args)?
                     };
 
                     // Pass 2: emit
-                    let f2 = std::fs::File::open(path)
-                        .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
+                    let f2 = std::fs::File::open(path).map_err(|e| {
+                        crate::error::NxsError::IoError(format!("{}: {e}", path.display()))
+                    })?;
 
                     match output_path {
                         Some(out_path) => {
-                            let out = std::fs::File::create(out_path)
-                                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", out_path.display())))?;
+                            let out = std::fs::File::create(out_path).map_err(|e| {
+                                crate::error::NxsError::IoError(format!(
+                                    "{}: {e}",
+                                    out_path.display()
+                                ))
+                            })?;
                             json_in::emit(BufReader::new(f2), out, &schema, args)
                         }
-                        None => {
-                            json_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args)
-                        }
+                        None => json_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args),
                     }
                 }
                 None => {
@@ -392,13 +391,15 @@ pub fn run_import(args: &ImportArgs) -> Result<ImportReport> {
                         .map_err(|e| crate::error::NxsError::IoError(e.to_string()))?;
                     match output_path {
                         Some(out_path) => {
-                            let out = std::fs::File::create(out_path)
-                                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", out_path.display())))?;
+                            let out = std::fs::File::create(out_path).map_err(|e| {
+                                crate::error::NxsError::IoError(format!(
+                                    "{}: {e}",
+                                    out_path.display()
+                                ))
+                            })?;
                             json_in::emit(BufReader::new(f2), out, &schema, args)
                         }
-                        None => {
-                            json_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args)
-                        }
+                        None => json_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args),
                     }
                     // spill NamedTempFile is dropped here → removed from disk
                 }
@@ -411,16 +412,22 @@ pub fn run_import(args: &ImportArgs) -> Result<ImportReport> {
                     let schema = if let Some(hint_path) = &args.schema_hint {
                         load_schema_hint(hint_path)?
                     } else {
-                        let f1 = std::fs::File::open(path)
-                            .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
+                        let f1 = std::fs::File::open(path).map_err(|e| {
+                            crate::error::NxsError::IoError(format!("{}: {e}", path.display()))
+                        })?;
                         csv_in::infer_schema(BufReader::new(f1), args)?
                     };
-                    let f2 = std::fs::File::open(path)
-                        .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
+                    let f2 = std::fs::File::open(path).map_err(|e| {
+                        crate::error::NxsError::IoError(format!("{}: {e}", path.display()))
+                    })?;
                     match output_path {
                         Some(out_path) => {
-                            let out = std::fs::File::create(out_path)
-                                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", out_path.display())))?;
+                            let out = std::fs::File::create(out_path).map_err(|e| {
+                                crate::error::NxsError::IoError(format!(
+                                    "{}: {e}",
+                                    out_path.display()
+                                ))
+                            })?;
                             csv_in::emit(BufReader::new(f2), out, &schema, args)
                         }
                         None => csv_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args),
@@ -443,8 +450,12 @@ pub fn run_import(args: &ImportArgs) -> Result<ImportReport> {
                         .map_err(|e| crate::error::NxsError::IoError(e.to_string()))?;
                     match output_path {
                         Some(out_path) => {
-                            let out = std::fs::File::create(out_path)
-                                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", out_path.display())))?;
+                            let out = std::fs::File::create(out_path).map_err(|e| {
+                                crate::error::NxsError::IoError(format!(
+                                    "{}: {e}",
+                                    out_path.display()
+                                ))
+                            })?;
                             csv_in::emit(BufReader::new(f2), out, &schema, args)
                         }
                         None => csv_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args),
@@ -459,16 +470,22 @@ pub fn run_import(args: &ImportArgs) -> Result<ImportReport> {
                     let schema = if let Some(hint_path) = &args.schema_hint {
                         load_schema_hint(hint_path)?
                     } else {
-                        let f1 = std::fs::File::open(path)
-                            .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
+                        let f1 = std::fs::File::open(path).map_err(|e| {
+                            crate::error::NxsError::IoError(format!("{}: {e}", path.display()))
+                        })?;
                         xml_in::infer_schema(BufReader::new(f1), args)?
                     };
-                    let f2 = std::fs::File::open(path)
-                        .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
+                    let f2 = std::fs::File::open(path).map_err(|e| {
+                        crate::error::NxsError::IoError(format!("{}: {e}", path.display()))
+                    })?;
                     match output_path {
                         Some(out_path) => {
-                            let out = std::fs::File::create(out_path)
-                                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", out_path.display())))?;
+                            let out = std::fs::File::create(out_path).map_err(|e| {
+                                crate::error::NxsError::IoError(format!(
+                                    "{}: {e}",
+                                    out_path.display()
+                                ))
+                            })?;
                             xml_in::emit(BufReader::new(f2), out, &schema, args)
                         }
                         None => xml_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args),
@@ -491,8 +508,12 @@ pub fn run_import(args: &ImportArgs) -> Result<ImportReport> {
                         .map_err(|e| crate::error::NxsError::IoError(e.to_string()))?;
                     match output_path {
                         Some(out_path) => {
-                            let out = std::fs::File::create(out_path)
-                                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", out_path.display())))?;
+                            let out = std::fs::File::create(out_path).map_err(|e| {
+                                crate::error::NxsError::IoError(format!(
+                                    "{}: {e}",
+                                    out_path.display()
+                                ))
+                            })?;
                             xml_in::emit(BufReader::new(f2), out, &schema, args)
                         }
                         None => xml_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args),
@@ -514,41 +535,31 @@ pub fn run_export(args: &ExportArgs) -> Result<ExportReport> {
     // Export is single-pass (reads .nxb bytes fully), so no stdin spill needed.
     macro_rules! open_input {
         ($path:expr) => {
-            std::fs::File::open($path).map_err(|e| {
-                crate::error::NxsError::IoError(format!("{}: {e}", $path.display()))
-            })
+            std::fs::File::open($path)
+                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", $path.display())))
         };
     }
 
     macro_rules! open_output {
         ($path:expr) => {
-            std::fs::File::create($path).map_err(|e| {
-                crate::error::NxsError::IoError(format!("{}: {e}", $path.display()))
-            })
+            std::fs::File::create($path)
+                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", $path.display())))
         };
     }
 
     match args.to {
         ExportFormat::Json => match (input_path, output_path) {
-            (Some(inp), Some(out)) => {
-                json_out::run(open_input!(inp)?, open_output!(out)?, args)
-            }
+            (Some(inp), Some(out)) => json_out::run(open_input!(inp)?, open_output!(out)?, args),
             (Some(inp), None) => json_out::run(open_input!(inp)?, std::io::stdout(), args),
-            (None, Some(out)) => {
-                json_out::run(std::io::stdin(), open_output!(out)?, args)
-            }
+            (None, Some(out)) => json_out::run(std::io::stdin(), open_output!(out)?, args),
             (None, None) => json_out::run(std::io::stdin(), std::io::stdout(), args),
         },
         ExportFormat::Csv => {
             use crate::convert::csv_out;
             match (input_path, output_path) {
-                (Some(inp), Some(out)) => {
-                    csv_out::run(open_input!(inp)?, open_output!(out)?, args)
-                }
+                (Some(inp), Some(out)) => csv_out::run(open_input!(inp)?, open_output!(out)?, args),
                 (Some(inp), None) => csv_out::run(open_input!(inp)?, std::io::stdout(), args),
-                (None, Some(out)) => {
-                    csv_out::run(std::io::stdin(), open_output!(out)?, args)
-                }
+                (None, Some(out)) => csv_out::run(std::io::stdin(), open_output!(out)?, args),
                 (None, None) => csv_out::run(std::io::stdin(), std::io::stdout(), args),
             }
         }
@@ -614,7 +625,13 @@ mod tests {
     #[test]
     fn export_args_maps_every_spec_flag() {
         let spec_fields: &[&str] = &[
-            "to", "pretty", "ndjson", "columns", "csv_delimiter", "binary", "csv_safe",
+            "to",
+            "pretty",
+            "ndjson",
+            "columns",
+            "csv_delimiter",
+            "binary",
+            "csv_safe",
         ];
         let a = ExportArgs::default();
         let _ = &a.to;
@@ -641,7 +658,10 @@ mod tests {
     #[test]
     fn convert_errors_map_to_documented_exit_codes() {
         use crate::error::NxsError;
-        assert_eq!(exit_code_for(&NxsError::ConvertSchemaConflict("x".into())), 4);
+        assert_eq!(
+            exit_code_for(&NxsError::ConvertSchemaConflict("x".into())),
+            4
+        );
         assert_eq!(
             exit_code_for(&NxsError::ConvertParseError {
                 offset: 0,
@@ -671,15 +691,12 @@ mod tests {
                 .and_then(|n| std::path::Path::new(n).file_stem())
                 .expect("no file stem");
             let derived = std::path::PathBuf::from(stem).with_extension("nxb");
-            assert_eq!(
-                derived.to_str().unwrap_or(""),
-                *expected,
-                "input={input}"
-            );
+            assert_eq!(derived.to_str().unwrap_or(""), *expected, "input={input}");
             // Must not contain `..`
             assert!(
-                !derived.components().any(|c| c
-                    == std::path::Component::ParentDir),
+                !derived
+                    .components()
+                    .any(|c| c == std::path::Component::ParentDir),
                 "traversal in derived path for input={input}"
             );
         }

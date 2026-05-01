@@ -65,9 +65,7 @@ fn import_json_stdin_schema_hint_single_pass_no_spill() {
     // just assert success and valid output).
     let mut schema_file = NamedTempFile::new().unwrap();
     schema_file
-        .write_all(
-            b"keys:\n  id: { sigil: \"=\" }\n  name: { sigil: '\"' }\n",
-        )
+        .write_all(b"keys:\n  id: { sigil: \"=\" }\n  name: { sigil: '\"' }\n")
         .unwrap();
 
     let json = sample_json_flat();

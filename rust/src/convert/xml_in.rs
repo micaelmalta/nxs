@@ -42,7 +42,11 @@ fn find_bytes_ci(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     let upper_needle: Vec<u8> = needle.iter().map(|b| b.to_ascii_uppercase()).collect();
     'outer: for i in 0..=(haystack.len() - needle.len()) {
         for j in 0..needle.len() {
-            let h = haystack.get(i + j).copied().unwrap_or(0).to_ascii_uppercase();
+            let h = haystack
+                .get(i + j)
+                .copied()
+                .unwrap_or(0)
+                .to_ascii_uppercase();
             if let Some(&n) = upper_needle.get(j) {
                 if h != n {
                     continue 'outer;
@@ -83,8 +87,7 @@ fn parse_records<B: BufRead>(
                 if depth > depth_limit {
                     return Err(NxsError::ConvertDepthExceeded);
                 }
-                let local_name = e
-                    .local_name();
+                let local_name = e.local_name();
                 let tag = reader
                     .decoder()
                     .decode(local_name.as_ref())
@@ -232,12 +235,13 @@ fn make_reader<R: Read>(reader: R) -> Reader<std::io::BufReader<R>> {
 
 /// Pass 1 — infer schema from an XML reader.
 pub fn infer_schema<R: Read>(mut reader: R, args: &ImportArgs) -> Result<InferredSchema> {
-    let record_tag = args.xml_record_tag.as_deref().ok_or_else(|| {
-        NxsError::ConvertParseError {
+    let record_tag = args
+        .xml_record_tag
+        .as_deref()
+        .ok_or_else(|| NxsError::ConvertParseError {
             offset: 0,
             msg: "XML import requires --xml-record-tag".into(),
-        }
-    })?;
+        })?;
 
     // Buffer the input so we can (1) pre-scan for entity expansion, (2) parse.
     let mut raw = Vec::new();
@@ -264,12 +268,13 @@ pub fn emit<R: Read, W: Write>(
     schema: &InferredSchema,
     args: &ImportArgs,
 ) -> Result<ImportReport> {
-    let record_tag = args.xml_record_tag.as_deref().ok_or_else(|| {
-        NxsError::ConvertParseError {
+    let record_tag = args
+        .xml_record_tag
+        .as_deref()
+        .ok_or_else(|| NxsError::ConvertParseError {
             offset: 0,
             msg: "XML import requires --xml-record-tag".into(),
-        }
-    })?;
+        })?;
 
     // Pre-scan for entity expansion before parsing.
     let mut raw = Vec::new();
@@ -317,9 +322,7 @@ pub fn emit<R: Read, W: Write>(
                     b'<' => {
                         if let Ok(bytes) = (0..value.len())
                             .step_by(2)
-                            .map(|i| {
-                                u8::from_str_radix(value.get(i..i + 2).unwrap_or("??"), 16)
-                            })
+                            .map(|i| u8::from_str_radix(value.get(i..i + 2).unwrap_or("??"), 16))
                             .collect::<std::result::Result<Vec<u8>, _>>()
                         {
                             nxs_writer.write_bytes(slot, &bytes);
@@ -463,8 +466,7 @@ mod tests {
         // Here we test with a UTF-8 BOM + declaration (the simpler case supported
         // on all platforms). A proper UTF-16 test would require generating actual
         // UTF-16 encoded bytes.
-        let xml: &[u8] =
-            b"<?xml version=\"1.0\" encoding=\"UTF-8\"?><root><item id=\"1\"/></root>";
+        let xml: &[u8] = b"<?xml version=\"1.0\" encoding=\"UTF-8\"?><root><item id=\"1\"/></root>";
         let args = args_with_tag("item");
         let schema = infer_schema(xml, &args).unwrap();
         assert!(schema.keys.iter().any(|k| k.name == "id"));

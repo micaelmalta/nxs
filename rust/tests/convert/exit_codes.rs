@@ -37,7 +37,7 @@ fn import_exits_5_when_input_file_missing() {
         .args(["--from", "json", "/tmp/nxs_test_nonexistent_12345.json"])
         .assert()
         .code(predicates::prelude::predicate::always()); // any non-zero; implementation lands later
-    // Once implemented, this becomes .code(5). For now accept any non-zero.
+                                                         // Once implemented, this becomes .code(5). For now accept any non-zero.
 }
 
 #[test]
@@ -111,10 +111,7 @@ fn export_exits_3_when_nxb_bad_magic() {
 
 #[test]
 fn inspect_exits_2_when_no_input() {
-    Command::cargo_bin("nxs-inspect")
-        .unwrap()
-        .assert()
-        .code(2);
+    Command::cargo_bin("nxs-inspect").unwrap().assert().code(2);
 }
 
 #[test]

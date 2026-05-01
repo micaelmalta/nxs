@@ -17,7 +17,10 @@ pub enum NxsError {
     /// Exit 4 — two records disagree on a key's sigil and policy is `error`.
     ConvertSchemaConflict(String),
     /// Exit 3 — malformed JSON/CSV/XML; byte offset is the position in the stream.
-    ConvertParseError { offset: u64, msg: String },
+    ConvertParseError {
+        offset: u64,
+        msg: String,
+    },
     /// Exit 3 — XML entity-expansion attack detected (billion-laughs etc.).
     ConvertEntityExpansion,
     /// Exit 3 — nesting depth exceeded `--max-depth` / `--xml-max-depth`.

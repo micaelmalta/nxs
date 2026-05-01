@@ -26,7 +26,11 @@ struct Cli {
 }
 
 fn parse_records(s: &str) -> Option<usize> {
-    if s == "all" { None } else { s.parse().ok() }
+    if s == "all" {
+        None
+    } else {
+        s.parse().ok()
+    }
 }
 
 fn main() {

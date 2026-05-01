@@ -85,7 +85,11 @@ fn main() {
         Some(PathBuf::from(&cli.input))
     };
     let output_path = cli.output.as_deref().and_then(|s| {
-        if s == "-" { None } else { Some(PathBuf::from(s)) }
+        if s == "-" {
+            None
+        } else {
+            Some(PathBuf::from(s))
+        }
     });
 
     let args = ExportArgs {
@@ -104,7 +108,10 @@ fn main() {
 
     match convert::run_export(&args) {
         Ok(report) => {
-            eprintln!("exported {} records ({} B)", report.records_read, report.output_bytes);
+            eprintln!(
+                "exported {} records ({} B)",
+                report.records_read, report.output_bytes
+            );
         }
         Err(e) => {
             eprintln!("error: {e}");

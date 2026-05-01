@@ -20,7 +20,11 @@ struct Cli {
     schema: Option<PathBuf>,
 
     /// Conflict resolution policy
-    #[arg(long, value_name = "error|coerce-string|first-wins", default_value = "error")]
+    #[arg(
+        long,
+        value_name = "error|coerce-string|first-wins",
+        default_value = "error"
+    )]
     on_conflict: String,
 
     /// JSON path to the record array (JSON only)
@@ -75,7 +79,9 @@ fn parse_import_format(s: &str) -> Result<ImportFormat, String> {
         "json" => Ok(ImportFormat::Json),
         "csv" => Ok(ImportFormat::Csv),
         "xml" => Ok(ImportFormat::Xml),
-        other => Err(format!("unknown format '{other}'; expected json, csv, or xml")),
+        other => Err(format!(
+            "unknown format '{other}'; expected json, csv, or xml"
+        )),
     }
 }
 
@@ -123,7 +129,9 @@ fn derive_output_path(input: &str, explicit: Option<&str>) -> Option<PathBuf> {
         return None; // stdin→stdout by default
     }
     let p = std::path::Path::new(input);
-    let stem = p.file_name().and_then(|n| std::path::Path::new(n).file_stem())?;
+    let stem = p
+        .file_name()
+        .and_then(|n| std::path::Path::new(n).file_stem())?;
     Some(PathBuf::from(stem).with_extension("nxb"))
 }
 
@@ -182,7 +190,10 @@ fn main() {
                 .as_ref()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|| "<stdout>".into());
-            eprintln!("imported {} records → {} ({} B)", report.records_written, out, report.output_bytes);
+            eprintln!(
+                "imported {} records → {} ({} B)",
+                report.records_written, out, report.output_bytes
+            );
         }
         Err(e) => {
             eprintln!("error: {e}");
@@ -190,4 +201,3 @@ fn main() {
         }
     }
 }
-

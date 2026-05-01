@@ -129,11 +129,7 @@ pub fn emit<R: Read, W: Write>(
             let slot_idx = schema.keys.iter().position(|k| &k.name == key);
             if let Some(idx) = slot_idx {
                 let slot = Slot(idx as u16);
-                let sigil = schema
-                    .keys
-                    .get(idx)
-                    .map(|k| k.sigil)
-                    .unwrap_or(b'"');
+                let sigil = schema.keys.get(idx).map(|k| k.sigil).unwrap_or(b'"');
                 match sigil {
                     b'=' => {
                         if let Ok(i) = value.parse::<i64>() {
@@ -161,9 +157,7 @@ pub fn emit<R: Read, W: Write>(
                         // writing a string blob into a binary-typed slot.
                         if let Ok(bytes) = (0..value.len())
                             .step_by(2)
-                            .map(|i| {
-                                u8::from_str_radix(value.get(i..i + 2).unwrap_or("??"), 16)
-                            })
+                            .map(|i| u8::from_str_radix(value.get(i..i + 2).unwrap_or("??"), 16))
                             .collect::<std::result::Result<Vec<u8>, _>>()
                         {
                             nxs_writer.write_bytes(slot, &bytes);
@@ -292,7 +286,10 @@ mod tests {
         };
         let schema = infer_schema(json, &args).unwrap();
         let x = schema.keys.iter().find(|k| k.name == "x").unwrap();
-        assert_eq!(x.sigil, b'"', "conflicting types with coerce-string → string");
+        assert_eq!(
+            x.sigil, b'"',
+            "conflicting types with coerce-string → string"
+        );
     }
 
     #[test]

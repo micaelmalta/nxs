@@ -16,7 +16,7 @@ use std::io::Write;
 /// Render the .nxb as human-readable text to `writer`.
 pub fn render_text<W: Write>(mut writer: W, args: &InspectArgs) -> Result<InspectReport> {
     let data = read_input(&args.common)?;
-    let decoded = decoder::decode(&data).map_err(|e| e)?;
+    let decoded = decoder::decode(&data)?;
 
     // Optionally verify hash
     let dict_hash_ok = if args.verify_hash {
@@ -58,19 +58,19 @@ pub fn render_text<W: Write>(mut writer: W, args: &InspectArgs) -> Result<Inspec
             break;
         }
         let abs_off = u64::from_le_bytes(
-            data[entry_off + 2..entry_off + 10]
+            data.get(entry_off + 2..entry_off + 10)
+                .ok_or(NxsError::OutOfBounds)?
                 .try_into()
                 .map_err(|_| NxsError::OutOfBounds)?,
         ) as usize;
-        let fields = decoder::decode_record_at(
-            &data,
-            abs_off,
-            &decoded.keys,
-            &decoded.key_sigils,
+        let fields = decoder::decode_record_at(&data, abs_off, &decoded.keys, &decoded.key_sigils)
+            .unwrap_or_default();
+        writeln!(
+            writer,
+            "  record[{i}] offset={abs_off} fields={}",
+            fields.len()
         )
-        .unwrap_or_default();
-        writeln!(writer, "  record[{i}] offset={abs_off} fields={}", fields.len())
-            .map_err(|e| NxsError::IoError(e.to_string()))?;
+        .map_err(|e| NxsError::IoError(e.to_string()))?;
     }
 
     Ok(InspectReport {
@@ -82,7 +82,7 @@ pub fn render_text<W: Write>(mut writer: W, args: &InspectArgs) -> Result<Inspec
 /// Render the .nxb as structured JSON matching `inspect_json_schema` in the spec.
 pub fn render_json<W: Write>(mut writer: W, args: &InspectArgs) -> Result<InspectReport> {
     let data = read_input(&args.common)?;
-    let decoded = decoder::decode(&data).map_err(|e| e)?;
+    let decoded = decoder::decode(&data)?;
 
     let dict_hash_ok = if args.verify_hash { Some(true) } else { None };
 
@@ -109,17 +109,13 @@ pub fn render_json<W: Write>(mut writer: W, args: &InspectArgs) -> Result<Inspec
             break;
         }
         let abs_off = u64::from_le_bytes(
-            data[entry_off + 2..entry_off + 10]
+            data.get(entry_off + 2..entry_off + 10)
+                .ok_or(NxsError::OutOfBounds)?
                 .try_into()
                 .map_err(|_| NxsError::OutOfBounds)?,
         ) as usize;
-        let fields = decoder::decode_record_at(
-            &data,
-            abs_off,
-            &decoded.keys,
-            &decoded.key_sigils,
-        )
-        .unwrap_or_default();
+        let fields = decoder::decode_record_at(&data, abs_off, &decoded.keys, &decoded.key_sigils)
+            .unwrap_or_default();
         let bitmask_hex = read_object_bitmask_hex(&data, abs_off);
         records_json.push(serde_json::json!({
             "offset": abs_off,
@@ -265,10 +261,16 @@ mod tests {
         assert!(v["dict_hash"].is_string(), "dict_hash must be a string");
         assert!(v["tail_ptr"].is_number(), "tail_ptr must be a number");
         assert!(v["keys"].is_array(), "keys must be an array");
-        assert!(v["record_count"].is_number(), "record_count must be a number");
+        assert!(
+            v["record_count"].is_number(),
+            "record_count must be a number"
+        );
         assert!(v["records"].is_array(), "records must be an array");
         // dict_hash_ok is absent when --verify-hash not set
-        assert!(v.get("dict_hash_ok").is_none(), "dict_hash_ok must be absent without --verify-hash");
+        assert!(
+            v.get("dict_hash_ok").is_none(),
+            "dict_hash_ok must be absent without --verify-hash"
+        );
     }
 
     #[test]

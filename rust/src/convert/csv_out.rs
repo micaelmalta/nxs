@@ -53,13 +53,13 @@ pub fn run<R: Read, W: Write>(
             break;
         }
         let abs_off = u64::from_le_bytes(
-            data[entry_off + 2..entry_off + 10]
+            data.get(entry_off + 2..entry_off + 10)
+                .ok_or(NxsError::OutOfBounds)?
                 .try_into()
                 .map_err(|_| NxsError::OutOfBounds)?,
         ) as usize;
-        let fields =
-            decoder::decode_record_at(&data, abs_off, &decoded.keys, &decoded.key_sigils)
-                .unwrap_or_default();
+        let fields = decoder::decode_record_at(&data, abs_off, &decoded.keys, &decoded.key_sigils)
+            .unwrap_or_default();
 
         // Build field map for column lookup.
         let field_map: std::collections::HashMap<&str, &DecodedValue> =
