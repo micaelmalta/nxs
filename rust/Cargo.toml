@@ -9,7 +9,7 @@ description = "Zero-copy compiler and reader for the Nexus Standard (NXS) bi-mod
 repository = "https://github.com/micaelmalta/nxs"
 documentation = "https://docs.rs/nexus-standard"
 readme = "README.md"
-keywords = ["serialization", "binary", "zero-copy", "nxs", "nexus", "nexus-standard"]
+keywords = ["serialization", "binary", "zero-copy", "nxs", "nexus-standard"]
 categories = ["encoding", "parser-implementations", "command-line-utilities"]
 
 [lib]
