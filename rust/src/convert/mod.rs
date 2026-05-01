@@ -453,7 +453,52 @@ pub fn run_import(args: &ImportArgs) -> Result<ImportReport> {
             }
         }
         ImportFormat::Xml => {
-            unimplemented!("XML import — see plan step `impl: XML dispatch in run_import`")
+            use crate::convert::xml_in;
+            match input_path {
+                Some(path) => {
+                    let schema = if let Some(hint_path) = &args.schema_hint {
+                        load_schema_hint(hint_path)?
+                    } else {
+                        let f1 = std::fs::File::open(path)
+                            .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
+                        xml_in::infer_schema(BufReader::new(f1), args)?
+                    };
+                    let f2 = std::fs::File::open(path)
+                        .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", path.display())))?;
+                    match output_path {
+                        Some(out_path) => {
+                            let out = std::fs::File::create(out_path)
+                                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", out_path.display())))?;
+                            xml_in::emit(BufReader::new(f2), out, &schema, args)
+                        }
+                        None => xml_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args),
+                    }
+                }
+                None => {
+                    let mut spill = tempfile::NamedTempFile::new()
+                        .map_err(|e| crate::error::NxsError::IoError(e.to_string()))?;
+                    std::io::copy(&mut std::io::stdin(), &mut spill)
+                        .map_err(|e| crate::error::NxsError::IoError(e.to_string()))?;
+                    let spill_path = spill.path().to_path_buf();
+                    let schema = if let Some(hint_path) = &args.schema_hint {
+                        load_schema_hint(hint_path)?
+                    } else {
+                        let f1 = std::fs::File::open(&spill_path)
+                            .map_err(|e| crate::error::NxsError::IoError(e.to_string()))?;
+                        xml_in::infer_schema(BufReader::new(f1), args)?
+                    };
+                    let f2 = std::fs::File::open(&spill_path)
+                        .map_err(|e| crate::error::NxsError::IoError(e.to_string()))?;
+                    match output_path {
+                        Some(out_path) => {
+                            let out = std::fs::File::create(out_path)
+                                .map_err(|e| crate::error::NxsError::IoError(format!("{}: {e}", out_path.display())))?;
+                            xml_in::emit(BufReader::new(f2), out, &schema, args)
+                        }
+                        None => xml_in::emit(BufReader::new(f2), std::io::stdout(), &schema, args),
+                    }
+                }
+            }
         }
     }
 }
